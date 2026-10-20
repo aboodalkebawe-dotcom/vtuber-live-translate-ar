@@ -1,0 +1,345 @@
+package com.xyq.livetranslate.ui
+
+import android.Manifest
+import android.app.Activity
+import android.content.Context
+import android.content.Intent
+import android.media.projection.MediaProjectionManager
+import android.os.Build
+import android.os.Bundle
+import com.xyq.livetranslate.CaptureService
+import com.xyq.livetranslate.PromptBuilder
+import com.xyq.livetranslate.R
+import com.xyq.livetranslate.SceneLibraryStore
+import com.xyq.livetranslate.SessionPromptContext
+import com.xyq.livetranslate.SettingsStore
+import com.xyq.livetranslate.StatusBus
+import com.xyq.livetranslate.TranslationMode
+import com.xyq.livetranslate.TranslationPlanStore
+
+internal enum class PendingSessionStage {
+    READY,
+    WAITING_PERMISSION,
+    WAITING_OVERLAY,
+    WAITING_PROJECTION,
+}
+
+/**
+ * Activity 在启动外部权限流程前冻结的内容/模式快照。
+ *
+ * 这里只保存 Service Intent 所需的非敏感内容；API Key 与运行参数
+ * 仍由 CaptureService 在真正启动时从 Store 读取并冻结。
+ */
+internal data class PendingSessionSnapshot(
+    val captureMode: String,
+    val prompt: String,
+    val sourceLanguageCode: String,
+    val targetLanguageCode: String,
+    val scenePresetId: String,
+    val sceneLabel: String,
+    val sessionTitle: String,
+    val sessionContext: String,
+    val stage: PendingSessionStage = PendingSessionStage.READY,
+)
+
+internal interface SessionContextAccess {
+    fun current(mode: TranslationMode): SessionPromptContext
+}
+
+/** ActivityResultLauncher 与系统动作的窄 Activity 边界。 */
+internal interface SessionHost {
+    fun checkPermission(permission: String): Boolean
+    fun requestPermissions(permissions: Array<String>)
+    fun canDrawOverlays(): Boolean
+    fun openOverlaySettings()
+    fun launchProjection(intent: Intent)
+    fun startForegroundService(intent: Intent)
+    fun startService(intent: Intent)
+    fun openTranslationSettings()
+    fun toast(message: String)
+}
+
+/** 统一协调会话启停、运行时权限、MediaProjection 与冻结快照消费。 */
+internal class SessionCoordinator(
+    private val context: Context,
+    private val persistDraftInputs: () -> Unit,
+    sessionContextAccess: SessionContextAccess? = null,
+    private val host: SessionHost,
+) {
+    private companion object {
+        const val STATE_PENDING_START_MODE = "pending_start_mode"
+        const val STATE_PENDING_STAGE = "pending_session_stage"
+        const val STATE_PENDING_PROMPT = "pending_prompt"
+        const val STATE_PENDING_SOURCE = "pending_source"
+        const val STATE_PENDING_TARGET = "pending_target"
+        const val STATE_PENDING_SCENE = "pending_scene"
+        const val STATE_PENDING_SCENE_LABEL = "pending_scene_label"
+        const val STATE_PENDING_TITLE = "pending_title"
+        const val STATE_PENDING_CONTEXT = "pending_context"
+    }
+
+    private var pendingSnapshot: PendingSessionSnapshot? = null
+    private var sessionContextAccess: SessionContextAccess? = sessionContextAccess
+
+    /** 第二阶段接线：所有页面 controller 创建完成后再安装上下文访问边界。 */
+    fun bindSessionContextAccess(access: SessionContextAccess) {
+        check(sessionContextAccess == null || sessionContextAccess === access) {
+            "SessionContextAccess already bound"
+        }
+        sessionContextAccess = access
+    }
+
+    fun onModeToggle(captureMode: String) {
+        if (StatusBus.serviceRunning) {
+            if (StatusBus.captureMode.isNotEmpty() && StatusBus.captureMode != captureMode) {
+                val other = if (StatusBus.captureMode == StatusBus.MODE_MIC) {
+                    context.getString(R.string.rt_mode_interpretation)
+                } else {
+                    context.getString(R.string.rt_mode_video)
+                }
+                host.toast(context.getString(R.string.rt_toast_session_running_conflict, other))
+                return
+            }
+            host.startService(
+                Intent(context, CaptureService::class.java).setAction(CaptureService.ACTION_STOP),
+            )
+            return
+        }
+        startCapture(captureMode)
+    }
+
+    /** 权限 launcher 的结果只恢复原冻结快照，不重新读取 View 或 Store。 */
+    fun onAudioPermissionResult() {
+        val snapshot = pendingSnapshot
+            ?.takeIf { it.stage == PendingSessionStage.WAITING_PERMISSION }
+            ?: return
+        val ready = snapshot.copy(stage = PendingSessionStage.READY)
+        pendingSnapshot = ready
+        continueStart(ready, returningFromPermissionRequest = true)
+    }
+
+    /** 投屏 launcher 的结果只消费处于投屏等待态的原冻结快照。 */
+    fun onProjectionResult(resultCode: Int, data: Intent?) {
+        val snapshot = pendingSnapshot
+            ?.takeIf {
+                it.captureMode == StatusBus.MODE_VIDEO &&
+                    it.stage == PendingSessionStage.WAITING_PROJECTION
+            }
+            ?: return
+        if (resultCode != Activity.RESULT_OK || data == null) {
+            pendingSnapshot = snapshot.copy(stage = PendingSessionStage.READY)
+            host.toast(context.getString(R.string.rt_toast_projection_permission_denied))
+            return
+        }
+
+        val startIntent = captureStartIntent(snapshot)
+            .putExtra(CaptureService.EXTRA_RESULT_CODE, resultCode)
+            .putExtra(CaptureService.EXTRA_RESULT_DATA, data)
+        host.startForegroundService(startIntent)
+        consumeStartedSession(snapshot)
+    }
+
+    fun saveState(outState: Bundle) {
+        val snapshot = pendingSnapshot ?: return
+        outState.putString(STATE_PENDING_START_MODE, snapshot.captureMode)
+        outState.putString(STATE_PENDING_STAGE, snapshot.stage.name)
+        outState.putString(STATE_PENDING_PROMPT, snapshot.prompt)
+        outState.putString(STATE_PENDING_SOURCE, snapshot.sourceLanguageCode)
+        outState.putString(STATE_PENDING_TARGET, snapshot.targetLanguageCode)
+        outState.putString(STATE_PENDING_SCENE, snapshot.scenePresetId)
+        outState.putString(STATE_PENDING_SCENE_LABEL, snapshot.sceneLabel)
+        outState.putString(STATE_PENDING_TITLE, snapshot.sessionTitle)
+        outState.putString(STATE_PENDING_CONTEXT, snapshot.sessionContext)
+    }
+
+    fun restoreState(savedState: Bundle?) {
+        if (savedState == null) return
+        val captureMode = savedState.getString(STATE_PENDING_START_MODE)
+            ?.takeIf(::isCaptureMode)
+            ?: return
+        val stage = savedState.getString(STATE_PENDING_STAGE)
+            ?.let { stored -> PendingSessionStage.entries.firstOrNull { it.name == stored } }
+            ?: PendingSessionStage.READY
+        val restored = PendingSessionSnapshot(
+            captureMode = captureMode,
+            prompt = savedState.getString(STATE_PENDING_PROMPT).orEmpty(),
+            sourceLanguageCode = savedState.getString(STATE_PENDING_SOURCE).orEmpty(),
+            targetLanguageCode = savedState.getString(STATE_PENDING_TARGET).orEmpty(),
+            scenePresetId = savedState.getString(STATE_PENDING_SCENE).orEmpty(),
+            sceneLabel = savedState.getString(STATE_PENDING_SCENE_LABEL).orEmpty(),
+            sessionTitle = savedState.getString(STATE_PENDING_TITLE).orEmpty(),
+            sessionContext = savedState.getString(STATE_PENDING_CONTEXT).orEmpty(),
+            stage = stage,
+        )
+        pendingSnapshot = restored.takeIf(::isValidSnapshot)
+    }
+
+    private fun startCapture(captureMode: String) {
+        if (!isCaptureMode(captureMode)) return
+        val reusable = pendingSnapshot?.takeIf {
+            it.stage == PendingSessionStage.WAITING_PERMISSION &&
+                it.captureMode == captureMode &&
+                it.prompt.isNotBlank()
+        }
+        if (reusable != null) {
+            val ready = reusable.copy(stage = PendingSessionStage.READY)
+            pendingSnapshot = ready
+            continueStart(ready, returningFromPermissionRequest = true)
+            return
+        }
+
+        val prepared = prepareSessionSettings(captureMode) ?: return
+        pendingSnapshot = prepared
+        continueStart(prepared, returningFromPermissionRequest = false)
+    }
+
+    private fun prepareSessionSettings(captureMode: String): PendingSessionSnapshot? {
+        val mode = promptMode(captureMode)
+        persistDraftInputs()
+        val plan = TranslationPlanStore.loadDraft(context, mode)
+        if (SettingsStore.apiKeyList(context).isEmpty()) {
+            host.toast(context.getString(R.string.rt_toast_fill_gemini_api_key_first))
+            host.openTranslationSettings()
+            return null
+        }
+
+        val scene = SceneLibraryStore.resolve(context, mode, plan.scenePresetId)
+        val sessionContext = requireSessionContextAccess().current(mode)
+        return PendingSessionSnapshot(
+            captureMode = captureMode,
+            prompt = PromptBuilder.build(
+                scene = scene,
+                context = sessionContext,
+                plan = plan,
+            ),
+            sourceLanguageCode = plan.sourceLanguageCode,
+            targetLanguageCode = plan.targetLanguageCode,
+            scenePresetId = scene.id,
+            sceneLabel = scene.label,
+            sessionTitle = when (mode) {
+                TranslationMode.INTERPRETATION -> context.getString(R.string.rt_history_title_interp)
+                TranslationMode.VIDEO -> context.getString(R.string.rt_history_title_video)
+            },
+            sessionContext = sessionContext.manualContext.trim(),
+        )
+    }
+
+    private fun continueStart(
+        snapshot: PendingSessionSnapshot,
+        returningFromPermissionRequest: Boolean,
+    ) {
+        if (!host.checkPermission(Manifest.permission.RECORD_AUDIO)) {
+            if (returningFromPermissionRequest) {
+                pendingSnapshot = snapshot.copy(stage = PendingSessionStage.READY)
+                host.toast(context.getString(R.string.rt_toast_record_audio_permission_required))
+                return
+            }
+            val permissions = mutableListOf(Manifest.permission.RECORD_AUDIO)
+            if (
+                Build.VERSION.SDK_INT >= 33 &&
+                !host.checkPermission(Manifest.permission.POST_NOTIFICATIONS)
+            ) {
+                permissions += Manifest.permission.POST_NOTIFICATIONS
+            }
+            pendingSnapshot = snapshot.copy(stage = PendingSessionStage.WAITING_PERMISSION)
+            host.requestPermissions(permissions.toTypedArray())
+            return
+        }
+
+        val ready = snapshot.copy(stage = PendingSessionStage.READY)
+        pendingSnapshot = ready
+        if (ready.captureMode == StatusBus.MODE_VIDEO) {
+            if (!host.canDrawOverlays()) {
+                pendingSnapshot = ready.copy(stage = PendingSessionStage.WAITING_OVERLAY)
+                host.toast(context.getString(R.string.rt_toast_overlay_permission_required))
+                host.openOverlaySettings()
+                return
+            }
+            pendingSnapshot = ready.copy(stage = PendingSessionStage.WAITING_PROJECTION)
+            val projectionManager = context.getSystemService(MediaProjectionManager::class.java)
+            host.launchProjection(projectionManager.createScreenCaptureIntent())
+            return
+        }
+
+        host.startForegroundService(captureStartIntent(ready))
+        consumeStartedSession(ready)
+    }
+
+    /** onResume：悬浮窗权限返回后自动续跑。 */
+    fun onHostResume() {
+        val snapshot = pendingSnapshot
+            ?.takeIf {
+                it.captureMode == StatusBus.MODE_VIDEO &&
+                    it.stage == PendingSessionStage.WAITING_OVERLAY
+            }
+            ?: return
+        if (!host.canDrawOverlays()) return
+        val ready = snapshot.copy(stage = PendingSessionStage.READY)
+        pendingSnapshot = ready
+        continueStart(ready, returningFromPermissionRequest = false)
+    }
+
+    private fun consumeStartedSession(snapshot: PendingSessionSnapshot) {
+        // C2：启动成功后保留本场上下文，便于断线/误停后重开；由主页折叠行的 × 手动清除。
+        if (pendingSnapshot == snapshot || pendingSnapshot?.captureMode == snapshot.captureMode) {
+            pendingSnapshot = null
+        }
+    }
+
+    private fun captureStartIntent(snapshot: PendingSessionSnapshot): Intent =
+        Intent(context, CaptureService::class.java)
+            .setAction(CaptureService.ACTION_START)
+            .putExtra(CaptureService.EXTRA_MODE, snapshot.captureMode)
+            .putExtra(CaptureService.EXTRA_SESSION_PROMPT, snapshot.prompt)
+            .putExtra(CaptureService.EXTRA_SOURCE_LANGUAGE, snapshot.sourceLanguageCode)
+            .putExtra(CaptureService.EXTRA_TARGET_LANGUAGE, snapshot.targetLanguageCode)
+            .putExtra(CaptureService.EXTRA_SCENE_PRESET, snapshot.scenePresetId)
+            .putExtra(CaptureService.EXTRA_SCENE_LABEL, snapshot.sceneLabel)
+            .putExtra(CaptureService.EXTRA_SESSION_TITLE, snapshot.sessionTitle)
+            .putExtra(CaptureService.EXTRA_SESSION_CONTEXT, snapshot.sessionContext)
+
+    private fun promptMode(captureMode: String): TranslationMode =
+        if (captureMode == StatusBus.MODE_MIC) {
+            TranslationMode.INTERPRETATION
+        } else {
+            TranslationMode.VIDEO
+        }
+
+    private fun isCaptureMode(value: String): Boolean =
+        value == StatusBus.MODE_MIC || value == StatusBus.MODE_VIDEO
+
+    private fun isValidSnapshot(snapshot: PendingSessionSnapshot): Boolean =
+        isCaptureMode(snapshot.captureMode) &&
+            snapshot.prompt.isNotBlank() &&
+            snapshot.sourceLanguageCode.isNotBlank() &&
+            snapshot.targetLanguageCode.isNotBlank() &&
+            snapshot.scenePresetId.isNotBlank() &&
+            snapshot.sceneLabel.isNotBlank()
+
+    private fun requireSessionContextAccess(): SessionContextAccess =
+        checkNotNull(sessionContextAccess) { "SessionContextAccess not bound" }
+
+    // 窄 internal 测试入口：只允许安装一个完整不可变 fixture，不暴露可变 pending 字段。
+    internal fun installPendingSnapshotForTest(snapshot: PendingSessionSnapshot) {
+        require(isValidSnapshot(snapshot))
+        pendingSnapshot = snapshot
+    }
+
+    internal fun beginPreparedSessionForTest(snapshot: PendingSessionSnapshot) {
+        require(isValidSnapshot(snapshot))
+        val ready = snapshot.copy(stage = PendingSessionStage.READY)
+        pendingSnapshot = ready
+        continueStart(ready, returningFromPermissionRequest = false)
+    }
+
+    internal fun pendingSnapshotForTest(): PendingSessionSnapshot? = pendingSnapshot
+
+    internal fun captureStartIntentForTest(): Intent =
+        captureStartIntent(requireNotNull(pendingSnapshot) { "No pending session snapshot" })
+
+    internal fun prepareSessionSettingsForTest(captureMode: String): Boolean {
+        val prepared = prepareSessionSettings(captureMode) ?: return false
+        pendingSnapshot = prepared
+        return true
+    }
+}

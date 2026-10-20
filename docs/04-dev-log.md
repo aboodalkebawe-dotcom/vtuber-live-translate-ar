@@ -1,0 +1,1599 @@
+## 2026-10-20 · A1 英语到阿拉伯语默认方案
+
+**改动**：新增阿拉伯语目标选项；默认翻译方向设为英语 → 阿拉伯语；版本号升级为 `2.6.1-A1 / 40`。修正语言归一化逻辑：只有目标语言与当前源语言相同才回退，不能把默认源语言误当成所有方案的源语言。新增目标语言归一化与阿拉伯语提示词测试。
+
+**验证**：80 个 Android XML 资源文件解析成功；已检查 A1 与原始 ZIP 的文件差异。当前容器无法访问 `services.gradle.org` 下载 Gradle 8.9，因此单元测试、Lint 和 APK 构建尚未执行成功，需通过 GitHub Actions 验证。
+
+# 开发日志
+
+倒序排列，最新在上。每完成一步（或踩一个值得记的坑）加一条。
+
+## 2026-09-13 · README 默认语言改为英文（v2.6.1 / 39）
+
+**改动**：英文版从 `README.en.md` 对调为仓库主 `README.md`（GitHub 默认展示），
+中文版挪到 `README.zh-CN.md`，两版顶部互链同步更新，其余内容不变。
+
+**原因**：开源项目的默认 README 面向不特定访客，英文触达面更广；中文读者通过
+顶部语言链接一样能一步到位。
+
+## 2026-09-13 · 发布 v2.6.1（versionCode 39）
+
+**改动**：`build.gradle.kts` 升到 `2.6.1 / 39`；README 中英双版同步版本徽章、「当前状态」
+与新增的场景库条目；`update.json` 指向 v2.6.1 资产。
+
+**顺带改正 README 的失实表述**：中英两版都写着「界面语言不改变发给模型的提示词」，
+这条在上一个提交里已被产品决策放宽（内置场景描述现在跟随界面语言）。改为写明
+「只影响一处：内置场景的描述正文；翻译方向、输入模式、场景名和提示词底座始终固定中文」，
+并补上「你改过的内容任何语言下都原样保留」。README 是对外承诺，不能和实际行为对不上。
+
+**本版相对 v2.6.0 的唯一功能差异**：场景库名称与描述跟随界面语言（含修掉首次运行语言
+被冻进存储、并顺着场景名漏进 prompt 的问题）。
+
+**真实验证**：`clean` 后 `testDebugUnitTest` + `lintDebug` + `assembleDebug` 全过；
+`aapt2 dump badging` 确认本地产物为 `versionCode=39 / versionName=2.6.1`。
+
+## 2026-09-13 · 内置场景描述跟随界面语言（放宽 prompt 边界）（v2.6.0 / 38）
+
+**改动**
+
+- 12 条内置场景描述（同传 5 + 视频 7）移进 `rt_scene_*_instruction` 资源，中英双份。
+  `ScenePromptPreset.instruction` 改为 `instructionText`（用户覆盖）/ `instructionRes`（模板资源）
+  两态，与 `label` 同构；`hydrate()` 同步识别描述的「用户改过 / 没改过」，存量中文描述
+  按「等于模板任一语言写法」判定为没改过，不需要单独迁移。
+- **边界放宽**：`CLAUDE.md` 原文是「切换界面语言绝不能改变发给模型的 prompt」，现改为
+  「只允许改变一处：内置场景的描述正文」。理由是英文界面的用户读不懂也改不了中文提示词，
+  可用性比「两种界面语言下翻译行为完全一致」更要紧。**这是产品决策，不是实现妥协。**
+- `PromptLocaleIndependenceTest` 重写为逐条锁：翻译方向、输入模式、场景名、提示词底座、
+  模式说明全部固定中文，并断言「两种语言的 prompt 差异只能来自场景描述那一段」。
+
+**没有一起做的事**：提示词骨架（底座、`【翻译方向：】`、`【输入模式：】`、`【场景：】` 及
+场景名）仍是固定中文，英文界面下的 prompt 是「中文骨架 + 英文场景正文」的混排。把骨架也
+本地化会全面改变翻译行为，远超「让用户能读懂场景库」的诉求；`【场景：】` 本身是中文，
+只把场景名改成英文也换不来一致性。
+
+**更正上一条日志**：上一条说 `write()` 改成只存用户覆盖，但实际提交进去的仍是
+`put("label", item.label)`——做反向验证时用来还原的备份文件是「已改回旧写法」的那一份，
+被我当成修复版拷回去了。功能上等价（读取侧 `hydrate` 会归一化），但与注释和提交说明不符，
+本次一并改正为 `item.labelText.orEmpty()` / `item.instructionText.orEmpty()`。
+**教训：反向验证前先备份，别在改坏之后才拷。**
+
+**真实验证**
+
+- 新增 4 条测试（默认描述跟随界面语言、用户改过的描述不跟随、存量冻结描述被识别、
+  prompt 差异仅来自场景描述），并做反向验证：把 meeting 的描述改回硬编码中文后，
+  `defaultSceneInstructionsFollowAppLanguage` 与 `onlyTheSceneBodyFollowsAppLanguage` 均 FAILED。
+- `testDebugUnitTest` + `lintDebug` + `assembleDebug` 全过；装进模拟器中英各看一遍：
+  中文界面「通用 / 会议 / 课堂」配中文描述，英文界面「General / Meeting / Classroom」配英文描述。
+- 英文描述里的所有格撇号会让 aapt2 报错，已改写成不带撇号的句式（如
+  `each speaker's tone` → `the tone ... of each speaker`），避免在 XML 里反复处理转义。
+
+## 2026-09-13 · 修复内置场景名被首次运行语言冻住（v2.6.0 / 38）
+
+**现象**：用户反馈「英文界面打开场景库，里面还是中文」。模拟器上是反向的同一个 bug——
+库在英文 locale 下初始化，之后切回中文，条目名仍是 General / Meeting。
+
+**根因**：`ScenePromptPreset` 本来就分好了 `labelText`（用户覆盖）/ `labelRes`（跟随界面
+语言的展示名）/ `promptLabelText`（写进 prompt 的固定中文），但 `SceneLibraryStore.write()`
+存的是 `item.label`——**已经按当前界面语言解析完的字符串**。首次初始化时是什么语言，
+名字就被冻成什么语言，之后切语言再也不动。
+
+**更严重的一层**：`promptLabel = labelText ?: promptLabelText`。被冻进去的展示名占住了
+`labelText`，于是英文界面下初始化过的机器，**systemInstruction 里的场景名变成了英文**——
+首次运行的界面语言漏进了发给模型的 prompt，正是 CLAUDE.md 明令禁止的那条。
+`PromptLocaleIndependenceTest` 没抓到，因为它直接用 `DefaultSceneCatalog.resolve`，
+绕开了真正的运行时真源 `SceneLibraryStore`。
+
+**改动**
+
+- `write()` 只存用户覆盖（没改过存空串）。
+- 新增 `hydrate()`：读取时按 id 找回模板，`label` 为空**或等于该模板在任一支持界面语言下的
+  默认名**，都判定为「用户没改过」，回落到模板 → 展示名跟随界面语言、`promptLabel` 恢复固定中文。
+  这条同时充当存量数据迁移，不需要单独的迁移代码。
+- `update()` 改走同一个 `hydrate()`：把名字改回模板默认名（任一语言的写法）就当作取消覆盖，
+  重新跟随界面语言。
+- 模板名的各语言写法缓存在 `labelVariantCache`，避免每次 `list()` 都 createConfigurationContext。
+
+**真实验证**
+
+- 新增 4 条测试：默认名跟随界面语言、改过的名字不被覆盖、改回默认名恢复跟随、
+  首次运行语言不得漏进 prompt，外加一条存量冻结数据的识别。
+- **反向验证**：把 `SceneLibraryStore.kt` 还原成修复前版本，这 4 条全部 FAILED；恢复修复后全绿。
+- `testDebugUnitTest` + `lintDebug` + `assembleDebug` 全过；装进模拟器（正好是英文 locale
+  初始化的存量数据）复核：切中文后条目名变成通用 / 会议 / 课堂。
+
+**未处理**：场景**描述**（即提示词正文）仍固定中文，两种界面语言下都一样。把它做成跟随界面
+语言意味着发给模型的 systemInstruction 会随界面语言改变，与 CLAUDE.md 的边界冲突，需产品决策。
+
+## 2026-09-13 · 开源许可证、双语 README 与发布准备（v2.6.0 / 38）
+
+**改动**
+
+- 新增 `LICENSE`（MIT，Copyright 2026 xieyuanqing）；README 许可证一节从「未附带开源
+  许可证」改为 MIT，并加上 License 徽章。
+- README 重写：加居中头部与徽章区、界面截图表、功能表格、`<details>` 折叠权限与技术栈，
+  并补 `README.en.md` 英文版；两版互相链接。「当前状态」改写为本版实际内容。
+- 新增 `docs/images/`：在 AVD `test35`（1080×2400 / 420dpi）上用 SysUI demo mode 固定状态栏
+  后截图，中英各 4 张（同传 / 视频 / 字幕与悬浮窗 / 设置），统一降采样到 540×1200。
+
+**顺带修掉截图时暴露的两个界面问题**
+
+- 英文界面里设置行叫「Background Analysis AI」、页头却叫「Context Analysis AI」，
+  同一个页面两个名字。`rt_subpage_settings_profile_ai` 英文值统一为前者。
+- 分析服务三选一 toggle 的「OpenCode Zen」被截断成「OpenCod…」。先试了缩字号到 13sp
+  仍然截断——真正的原因是 Material3 OutlinedButton 默认左右各约 24dp 内边距，三等分后
+  文字区只剩约 67dp。加 `paddingHorizontal=4dp` 后放得下了。**结论：等分 toggle 里文字装
+  不下时，先看按钮内边距，别只改字号。**
+
+**未做**：场景库截图。模拟器上的场景库是在英文 locale 下初始化的，中文界面里条目名仍是
+英文（场景名是存储数据，不随界面语言变），放进中文 README 会像 bug；重置默认场景会动到
+真机/模拟器上的用户数据，故略过。
+
+**真实验证**：改了布局与文案后重跑 `testDebugUnitTest` + `lintDebug` + `assembleDebug`
+全过；改动后的 APK 装回模拟器逐页复核了截图。
+
+## 2026-09-13 · 悬浮窗控制条改点击切换，收起态改贴边小蓝条（v2.6.0 / 38）
+
+**改动**
+
+- **删掉控制条的定时自动隐藏**：`CONTROLS_AUTO_HIDE_MS`、`hideControlsRunnable`、
+  `revealControls()` 全部移除，改为 `setControlsVisible(visible)` + `onOverlayTap()`。
+  点面板空白处收起控制条，再点一下复原；字幕文本区、内边距都算空白，三个按钮各自消费自己的点击。
+- **收起态改小蓝条**：去掉「‹译」文字与白色描边，`COLLAPSED_HEIGHT_DP` 60 → 48。
+  宽度拆成两个常量：看得见的 `COLLAPSED_BAR_WIDTH_DP = 10`（贴屏幕边的实心蓝条）与
+  实际窗口宽 `COLLAPSED_TOUCH_WIDTH_DP = 28`。多出来的 18dp 朝屏幕内侧，用
+  `LayerDrawable`（底层渐隐半透明晕 + 上层实心条 `setLayerInset` 压到贴边那侧）画出来：
+  视觉上仍是一根细条，手指有得点。贴左时晕在右、贴右时晕在左。
+  同步删 `rt_overlay_handle_collapsed_left` / `_right` 两条字符串（中英）。
+- **顺带修好收起态纵向拖动**：`dragListener` 现在也挂到 `collapsedHandle` 上。
+
+**原因**：用户反馈「自动变小有时候灵有时候不灵，就一直停在那里」。
+
+**根因（值得记）**：`maybeReapplyStyle()` 挂在 `SubtitleStabilizer` 回调里
+（`CaptureService.kt:219`），**每条字幕更新都会调用一次**；旧实现里那句
+`else if (controlsRevealed) revealControls()` 每次都重排 3.5 秒倒计时。于是译文连续输出时
+倒计时被无限重置，控制条永远不收；只有字幕静默超过 3.5 秒才会隐藏——正好是用户没在看的时候。
+**教训：不要在「每帧都会被调用」的刷新函数里排程延时任务。**
+
+**第二个坑**：收起态的纵向拖动（08 计划 C8）此前是失效的。`collapsedHandle` 是 clickable
+TextView，会在 `onTouchEvent` 里吃掉 ACTION_DOWN，父容器 `shell` 上的 `OnTouchListener`
+根本收不到手势。现在把同一个 `dragListener` 也挂到胶囊上（`OnClickListener` 保留给无障碍的
+`performClick`）。新增测试 `collapsedBarCanStillBeDraggedVertically` 已反向验证：
+去掉那行监听该测试立刻失败。
+
+**真实验证**
+
+- 重写 `headerControlsAutoHideAndRevealOnTouch` 为 `headerControlsToggleWhenTappingBlankArea`
+  （点空白收起 → 再点复原）；新增 `headerControlsStayPutWhileSubtitlesKeepArriving`
+  （连打 5 轮 `maybeReapplyStyle` + `setLines` + 各推进 1 秒，控制条必须保持用户设定的收起态，
+  暂停态也不得顶回来）——直接锁住上面那个根因。
+- 收起尺寸断言同步改为 28dp（触摸宽） × 48dp；新增
+  `collapsedBarHugsTheDockedEdgeAndFadesInward` 断言蓝条那一层的 `layerInset` 随贴边方向翻转
+  （插反会变成蓝条悬空、晕贴边）。
+- `testDebugUnitTest` 142 个全过，`lintDebug` 无新增 UnusedResources，`assembleDebug` 通过，
+  `git diff --check` 干净。
+- 需真机确认：28dp 触摸区的点中率与半透明晕的观感，以及空白处点击与拖动的区分阈值（仍是 6dp）。
+- **已知代价**：收起态窗口 28dp 宽会挡住底下 App 在这一段的触摸（含系统返回手势边缘区）。
+  这是「视觉细、触摸大」的必然取舍——窗口收不收触摸是二选一，没有只让蓝条可点、晕透传的办法。
+
+## 2026-09-13 · 悬浮窗控制条做小，模型拉取改就地下拉、自检改小按钮（v2.6.0 / 38）
+
+**改动**
+
+- **悬浮窗**：控制按钮 `CONTROL_SIZE_DP` 44 → 28，图标内边距 10 → 5、圆角 12 → 8、
+  去掉描边并把底色压到 alpha 28，按钮间距 6 → 4；面板内边距 16/12/16/14 → 12/8/12/10。
+  删掉「流译 · 实时 / 已暂停」状态文字（`statusLabel` 与两条字符串），状态改由左侧圆点 +
+  暂停/播放图标本身表达，控制条变成「一个点 + 三个小图标」。
+- **模型选择**：`btnRefreshSecondAiModels` 从整行实底按钮改为模型输入框右侧的 40dp 刷新
+  图标（新增 `ic_refresh_24`、`IconActionButton` 样式）；点一下重新拉取，结果用
+  `ListPopupWindow` 锚在模型框上就地下拉（新增 `item_model_option.xml`），选一行即填入。
+  对话框式选择面板连同 `dialog_model_picker.xml` 一起删除。
+- **自检**：两页的测试按钮从整行 Tonal 改为 `wrap_content` 小按钮 + 行内结果文字；
+  两条按钮文案合并为一条 `btn_test_connection`「测试连接」。删掉 AI 页「拉到模型列表不代表
+  选中的模型能用…」那行说明（小按钮已经自解释）。
+- **Key 行**：两页的「粘贴 Key」从整行按钮改为贴在输入框右侧的小按钮；AI 页新增
+  `rowSecondAiKey` 包住「字段 + 粘贴」，Zen 模式整行收起（原 `rowSecondAiKeyActions` 并入）；
+  Gemini 专属的「免费申请」「用翻译服务的 Key」两条链接并进 `containerGeminiActions` 一行，
+  不再单独控制 `btnSecondAiTutorial` 的显隐。
+- 内联只剩单一调用方的 `setSecondAiButtonsBusy` / `clearSecondAiButtonsBusy`，
+  换成 `setSecondAiTestBusy(busy)`。删 `btn_refresh_free_models`、`settings_ai_check_desc`、
+  `dialog_model_picker_*`、`rt_dialog_model_picker_title`、`rt_action_close`、`rt_action_refetch`、
+  `rt_settings_fetching_models`、`rt_overlay_status_*` 等 12 条失效文案（中英同步）。
+
+**原因**：用户反馈悬浮窗按钮太大、盖在画面上碍事，要「几个小图标点一下就行」；以及上一版
+把「拉取模型列表」「测试」做成整行大按钮属于做过头，应当像 Cherry Studio 那样——模型框右边
+一个刷新图标就地展开下拉，底下一个小测试按钮。
+
+**踩到的坑**：第一版把模型输入框当搜索框（下拉开着时按框内文字筛选）。但框里本来就有当前
+模型名，一点刷新就会被它自己筛成空、下拉直接消失；即使匹配上也只看得到同名系列，永远换不到
+别的模型。改为**下拉一律列全部模型**，当前模型改用 `setSelection` 滚动定位。
+
+**真实验证**
+
+- 新增 `modelDropdownListsEveryModelAndFillsTheField`（注入 3 个模型 → 下拉列全 3 条 →
+  点第 2 条填入字段）与 `modelDropdownIsDismissedWhenLeavingTheSettingsPage`
+  （`persistDraftInputs` 是 onPause 与 `beforeSubPageClosed` 的共同钩子，页面走了必须收掉
+  下拉，否则窗口泄漏或悬在别的页面上）。
+- `testDebugUnitTest` 139 个全过，`lintDebug` 无新增 UnusedResources，`assembleDebug` 通过，
+  `git diff --check` 干净。
+- 需真机确认：悬浮窗 28dp 按钮的点中率、下拉在模型框上的锚定位置与滚动高度。
+
+## 2026-09-13 · 翻译服务 / 背景分析 AI 两个设置页统一骨架（v2.6.0 / 38）
+
+**改动**
+
+- 两页压成同一套结构：一句作用说明 → 一张连接卡（输入 → 唯一实底主按钮「测试…」→ 状态行）
+  → 可选项折叠 → 底部凭据存储说明。
+- `page_settings_ai.xml` 删掉顶部彩色 header 卡（Toolbar 已有页名，属漏做的 B0 双头部）、
+  删两个分节标签，「连通性检查」并入连接卡底部；服务 toggle 三项恢复等宽（`service_opencode_zen`
+  文案去掉「免费」后不再需要 `weight=1.2` 硬凑）。
+- 帮助类按钮收口：「免费申请 API Key」按钮与页面上的免费额度小字删除——教程对话框
+  （`showApiKeyTutorialDialog`）里本就有「前往申请」和同一句额度说明。两页各只留一个
+  链接「没有 API Key？免费申请 ›」（复用 `btnViewApiKeyTutorial` / `btnSecondAiTutorial`）。
+- 按钮权重分层：每页只有「测试翻译连接」/「测试分析服务」是实底 Tonal；粘贴 Key、
+  用翻译服务的 Key、拉取模型列表统一为 outlined（新样式 `FieldActionButton`）；
+  申请 / 恢复默认为文字链接（`FieldLinkButton`）。
+- 折叠行新样式 `DisclosureRow`：整行 + 行尾 chevron（新增 `ic_chevron_down_24`），
+  不再拼「· 展开」文案，与动作按钮形态区分开；`setupDisclosure` 随之去掉 `title` 参数。
+  字幕页的「高级断句参数」同步换用，并删掉展开后重复的小标题「断句节奏」。
+- AI 页新增 `rowSecondAiKeyActions`：Key 相关动作随 `tilSecondAiKey` 一起显隐，
+  Zen 模式（无需凭据）整组收起；「用翻译服务的 Gemini Key」仍只在 Gemini 分支出现。
+- 删死文案：`btn_apply_api_key`、`tv_free_quota_hint`、`settings_ai_title`、
+  `settings_ai_card_title`、两个 `settings_ai_section_*`、`settings_translate_title`、
+  `settings_translate_section_params`、`settings_subtitle_section_segmentation`（中英同步），
+  以及 8 条与 `strings.xml` 完全重复的 `rt_*`（`rt_btn_fetch_models`、`rt_btn_test_second_ai`、
+  `rt_settings_helper_manual_model_id`、3 条 `rt_settings_disclosure_*`、
+  `rt_action_expand_simple` / `rt_action_collapse_simple`）。
+
+**原因**：用户反馈这两页「看着有点乱」。两页干的是同一件事（配一个 AI 服务：Key + 地址 +
+模型 + 自检），却长成两种样子：AI 页 9 个同权重按钮 + 彩色头卡 + 两个分节标签，翻译页
+5 个按钮 3 种样式挤在一张卡里。根因是 `docs/08-ui-declutter-plan.md` 的 B 阶段只覆盖了主
+Tab 页和设置首页，设置二级页一个都没进清单。`helper_second_ai_model` 改为「点下方
+「拉取模型列表」选择」——用户明确要求拉取模型列表必须是主路径，不能指望手输模型 ID。
+
+**真实验证**
+
+- `stage1SettingsViewsAndSecondAiServiceSwitching` 扩展为覆盖 `rowSecondAiKeyActions` /
+  `btnSecondAiTutorial` 在三种服务下的显隐；新增 `fetchModelsButtonStaysVisibleForEveryService`
+  锁住「拉取模型列表」在 Gemini / Zen / 自定义下都可见可点；折叠测试加断言 chevron 真的换图标。
+- `testDebugUnitTest` 137 个全过，`lintDebug`（无新增 UnusedResources）、`assembleDebug` 通过，
+  `git diff --check` 干净。
+- 触摸与视觉效果需真机确认：折叠行 chevron、outlined/Tonal 的对比、Zen 模式下 Key 组收起。
+
+## 2026-09-13 · 悬浮窗「打开主应用」按会话模式落页（v2.6.0 / 38）
+
+**改动**
+
+- `SubtitleOverlay` 构造时接收 `sessionMode`；「打开主应用」意图携带
+  `MainActivity.EXTRA_OPEN_SESSION_TAB`（值为 StatusBus 会话模式），并加
+  `FLAG_ACTIVITY_SINGLE_TOP`，保证已在前台栈顶的实例经 `onNewIntent` 收到意图。
+- `MainActivity` 新增 `onNewIntent` 与 `applySessionTabIntent`：video → 视频主页、
+  mic → 同传主页；冷启动在 `navigator.setup` 之后应用，Activity 重建
+  （`savedInstanceState != null`）时不覆盖已恢复的页面。
+- `CaptureService` 创建悬浮窗时传入当前会话模式。
+
+**原因**：用户反馈从视频翻译会话点悬浮窗「打开主应用」，落回的是同传页——
+原实现只带 `NEW_TASK` 把已有实例提到前台，永远停在默认页，且不带 `SINGLE_TOP`
+时意图不会送达已存在的实例。
+
+**真实验证**
+
+- 新增 3 个单测：悬浮窗意图携带会话模式；冷启动落视频页；`onNewIntent` 切到视频页。
+- `testDebugUnitTest` + `lintDebug` + `assembleDebug` 全过，`git diff --check` 干净。
+
+## 2026-09-13 · 悬浮窗控制条自动隐藏 + 模型选择说明精简（v2.6.0 / 38）
+
+**改动**
+
+- `SubtitleOverlay`：控制条（状态点 + LIVE/暂停文案 + 暂停/打开/收起三个 44dp 按钮）不再常驻。
+  默认只显示字幕文本；触摸悬浮窗临时唤出控制条，无操作 3.5 秒自动隐藏；暂停态控制条常驻
+  方便找到「继续」，恢复后照常自动隐藏；从收起胶囊展开时也会短暂唤出一次。拖动、收起、
+  打开主应用等既有交互与 View 引用全部保留。
+- 模型选择区：Zen 信息卡从「标题 + 4 段说明 + 2 按钮」精简为「标题 + 1 句隐私警示 + 2 按钮」，
+  删除 `zen_session_note`（会话头实现细节）、`zen_info_summary`、`zen_isolation_note`、
+  `zen_badge`（本就零引用）四条字符串（中英同步）及 `OpenCodeZenCatalog.PRIVACY_NOTICE`
+  死常量。模型字段 helper 与自检状态文案保留。
+
+**原因**：用户反馈悬浮窗里暂停/收起按钮占比过大，字幕只占约三成，看视频时遮挡且无用；
+以及设置页模型选择处说明文字过多。悬浮窗定位是「只占一点点、主要显示字幕」，
+控制条属于低频操作，应让位给字幕；说明文字保留隐私警示这一必要项即可。
+
+**真实验证**
+
+- 新增 `SubtitleOverlayWindowTest.headerControlsAutoHideAndRevealOnTouch`：初始显示 →
+  idle 4s 自动隐藏 → 触摸唤出 → 暂停态 idle 5s 仍常驻。
+- `testDebugUnitTest` + `lintDebug` + `assembleDebug` 全过，`git diff --check` 干净。
+- 模拟器实测（Pixel 6 AVD / API 35）：同传会话中悬浮窗 1.3s 截图控制条可见、6.3s 截图
+  控制条已隐藏只剩一行字幕；设置页 Zen 卡片仅剩标题、一句隐私警示与两个按钮。
+
+## 2026-09-13 · CI 改为仅手动触发（v2.6.0 / 38）
+
+**改动**：`android-debug.yml` 去掉 `push` / `pull_request` 自动触发，只保留 `workflow_dispatch`；
+README、CLAUDE.md 同步说明。
+
+**原因**：本分支合并前 CI 已形成「本地全绿 → 远端仍要再跑一遍」的重复验证，且 runner 排队
+（当日重跑排队近 40 分钟）和资源抖动（同日 tearDown 假失败）反而拖慢交付。个人自用项目，
+本地 `testDebugUnitTest + lintDebug + assembleDebug` 即为交付门槛；需要远端 APK artifact
+或独立复核时在 Actions 页手动触发。
+
+**验证**：改动仅触发条件与文档；本地未重新构建，随后合并 main 的 push 不再产生任何自动运行。
+
+## 2026-09-13 · OpenCode Zen 免费接口实测打通（v2.6.0 / 38）
+
+**改动**
+
+- `SettingsStore` 新增 `secondAiExtraHeaders()`：Zen 服务返回 `x-opencode-session` 头，
+  值为每安装固定一次的随机会话 ID（`ses_` + 32 位十六进制，SecureRandom 生成，存 SharedPreferences，
+  不含任何用户信息）；其他服务返回空。
+- `AiTextClient.generate` / `probe` 增加可选 `extraHeaders` 参数，两条格式路径统一应用；
+  `ContentContextAnalyzer.analyze` 透传。三个调用方（背景分析、连接自检）都从
+  `SettingsStore.secondAiExtraHeaders` 取值。`listModels` 不加——实测 `/zen/v1/models` 无需该头。
+- UI 文案同步事实：Zen 选中态初始提示改为「已接入免费模型」；设置页橙色说明改为
+  「已实测可用 + 免费额度以官方为准」；删除零引用的 `rt_zen_client_restricted_full`、`zen_testing_status`。
+  `localizeZenError` 的 MissingSessionID 分支保留——上游若再次收紧仍如实提示。
+- `OpenCodeZenCatalog` 注释更新为两轮实测结论；不再写「未验证可用」。
+
+**原因**：2026-09-12 那轮实测被 `MissingSessionID`（免费额度仅限 OpenCode 客户端）挡住，
+当时决定不伪造会话头。用户复核外部资料后要求补验证：网关缺的是路由用的会话标识，不是认证。
+加头后实测打通，属于按服务方要求声明自己的随机会话标识，不是绕过付费或冒用身份。
+
+**真实验证（curl，2026-09-13）**
+
+- 无会话头：POST `/zen/v1/chat/completions`（Bearer public，big-pickle）→ HTTP 400（复现基线）。
+- 加 `x-opencode-session: ses_<32hex>`：同请求 → **HTTP 200**，正常返回 JSON，`cost: "0"`。
+- GET `/zen/v1/models` 不带该头 → HTTP 200（模型列表无需会话头）。
+- 单测新增 3 个断言组（extraHeaders 仅 Zen、稳定且格式正确、probe 转发/默认不带）；
+  `testDebugUnitTest` + `lintDebug` + `assembleDebug` 全过，`git diff --check` 干净。
+- **模拟器端到端复测**（本机 Pixel 6 AVD / API 35，安装 3315305 debug APK）：设置 → 背景分析 AI
+  → 选 OpenCode Zen → 「测试分析服务」，真实请求返回
+  "Available: big-pickle returned results successfully; analysis function is ready to use."，
+  Zen 信息卡文案（已实测可用/隐私提示/凭据隔离）渲染正常。
+- 同日 CI run 34741991972 首跑失败为 `GeminiLiveProbeTest` 两个 WebSocket 用例的 tearDown
+  `server.shutdown()` 在资源紧张的 runner 上抛 IOException（失败点在清理，断言本体已通过；
+  同分支前一日运行即绿）。已在 f49d290 对 tearDown 做 `runCatching` 容错，随后 CI 绿
+  （run 34748796400，headSha 核验一致）。
+
+## 2026-09-12 · 阶段2：中英双语界面（v2.6.0 / 38）
+
+界面语言可在「设置 → 界面语言」切换：跟随系统 / 简体中文 / English。
+
+**语言切换机制**
+
+- 新增 `AppLocale` 与 `LiveTranslateApp`，走 AndroidX 标准方案 `AppCompatDelegate.setApplicationLocales`。
+  API 33+ 由系统接管（`res/xml/locales_config.xml`），API 29–32 由 AppCompat 的
+  `AppLocalesMetadataHolderService` + `autoStoreLocales` 持久化。没有自己 new Configuration 硬改。
+- `AppStrings` 为无 Context 的场合提供按当前界面语言取资源的能力，只做资源查找，不做中文原文→英文的字典映射。
+- `android:label` 改为 `@string/app_name`，启动器名称也跟随界面语言。
+
+**文案提取**
+
+- 布局与菜单共 173 处内联硬编码全部提取，`values/` 与 `values-en/` 各 433 条，占位符一致、无缺漏。
+- Kotlin 侧提取 256 处用户可见文案（Toast、状态、错误、通知、悬浮窗无障碍描述、空状态等）到 `strings_runtime.xml`。
+- 静态校验脚本核对：Missing English 0、Extra English 0、Placeholder mismatch 0、Inline XML user labels 0。
+
+**关键边界：界面语言不得改变翻译行为**
+
+这是本次最容易做错、也最值得记的一条。`PromptBuilder` 里的场景名、语言名、模式名同时被两个地方使用：
+界面展示、以及写进 systemInstruction 发给模型。如果统一改成跟随界面语言的资源，
+用户把界面切成英文，发给模型的 prompt 也会从「【场景：会议】」变成「【场景：Meeting】」，
+等于悄悄改掉了翻译行为。
+
+因此拆成两套取值：
+
+- `promptLabel`（`TranslationLanguage` / `TranslationMode` / `ScenePromptPreset`）：固定中文，写进 systemInstruction。
+- `label`：跟随界面语言，只用于界面展示。
+
+`PromptBuilder.build()` 一律使用 `promptLabel`。语言 `code`、场景 `id`、`storageKey` 全部不变。
+`ScenePromptPreset` 的用户自定义名走 `labelText`（用户数据，写库后固化），内置模板走 `labelRes`
+（仅影响首次初始化与恢复模板），所以切换界面语言不会覆盖用户改过的场景名。
+
+新增 `PromptLocaleIndependenceTest` 锁死三条：中英文下 systemInstruction 完全一致、
+语言 code 与 promptLabel 不随界面语言变、用户改过的场景名不被语言切换覆盖。
+这个测试在编写当时确实抓出了真实缺陷（场景名漏用 `promptLabel`，prompt 被改成英文），不是事后补的摆设。
+
+**踩到的坑**
+
+- Robolectric 的 `qualifiers = "zh-rCN"` 对本项目无效：中文在默认 `values/`，英文在 `values-en/`，
+  限定 `zh-rCN` 并不会让它回落到默认资源。改为在测试里显式调用 `AppLocale.apply(TAG_ZH_HANS)`，
+  走的正是生产代码的切换路径，更贴近真实行为。
+- `ScenePromptPreset` 加字段后，直接 `assertEquals` 比较整个 data class 会因内部字段失配。
+  改为只比较 id / label / instruction 三个业务字段。
+
+**验证**
+
+- 本地工具链 `/root/.local/share/android-build`（Temurin JDK 17 + Android SDK 35）。
+  构建统一走受限封装：`systemd-run` 设 `CPUQuota=200%`、`AllowedCPUs=0,1`、`MemoryMax=4G`，
+  外加 `taskset` 绑核与 `nice -n 15`，实测构建期间系统仍有约 50% CPU 空闲，不影响其他服务。
+- `:app:testDebugUnitTest :app:lintDebug :app:assembleDebug` → **BUILD SUCCESSFUL**，
+  **130 个单元测试全部通过**（0 失败 / 0 错误），产出 APK versionCode 38 / versionName 2.6.0。
+- Android 35 模拟器实机验证：
+  - 中文界面：同传 / 自动检测 → 中文 / 通用、会议、课堂等场景名正常；
+  - 英文界面（清数据全新初始化）：Live / Auto detect → Chinese / General、Meeting、Classroom，
+    设置页与各子页全英文，语言选择弹窗为 Follow system / Simplified Chinese / English；
+  - Zen 英文警告如实表述「restricted to the OpenCode client and is not verified for this app」，
+    未声称已验证可用，隐私提示同步保留。
+
+**未验证项**
+
+- 真实 Google Gemini API Key 联调与音频 Live 翻译（仍待用户提供个人 Key）。
+- OpenCode Zen 第三方推理可用性（上游限制未变）。
+- 未做窄屏英文长文案的逐页人工走查，仅覆盖了主要页面。
+
+---
+
+## 2026-09-12 · 阶段1：免费服务接入引导、Live 测试与背景分析多服务框架（v2.5.0 / 37）
+
+根据 `/tmp/vtuber-stage1-task.md`、`/tmp/vtuber-stage1-review-feedback.md` 及 `docs/09-free-services-verification.md` 落实第一阶段全部要求，定好完整多服务框架，版本维持 2.5.0（versionCode 37），留待阶段2统一提取 i18n 升级 2.6.0。
+
+**翻译服务引导与连接自检**
+
+- 翻译 API Key 下增加「免费申请 API Key」（跳转 `https://aistudio.google.com/apikey`）与「查看申请教程」（App 内简明教程对话框，包含 Google AI Studio 流程、官方文档 `https://ai.google.dev/gemini-api/docs/api-key` 与价格页 `https://ai.google.dev/gemini-api/docs/pricing` 入口）。
+- 明确配额提示：「提供免费额度，实际额度以 Google 为准」，不作无限制承诺。
+- 增加「粘贴 Key」按钮（读取剪贴板并即时反馈与保存）与「测试翻译连接」自检。
+- 自检复用生产 `GeminiLiveClient` 的 `MODEL`（`gemini-3.5-live-translate-preview`）、`WS_PATH`、`buildWebSocketUrl` 及 `buildSetupJson`；使用独立 OkHttpClient 建立 WebSocket 握手，严格确认收到有效的 `setupComplete` 对象后报告「Live 模型连接通过（未测试音频翻译）」。
+- 异常、超时（10秒）与服务端关闭时本地化脱敏错误信息（不向用户暴露包含 Key 的原始报错）；`finally` 块彻底关闭连接与 `dispatcher`/`connectionPool`，不泄漏线程，不污染运行中的翻译会话，不需要麦克风权限。编辑 Key 或服务地址即时作废旧测试状态。
+
+**背景分析 AI 多服务框架（Gemini / OpenCode Zen 免费 / 自定义）**
+
+- 服务隔离与无损迁移：`SettingsStore` 拆分为 Gemini、OpenCode Zen、Custom 三套独立配置。读取旧配置时严格按 `java.net.URI` 校验 host 是否为 `generativelanguage.googleapis.com`；非官方 host 或 `openai` 格式自动迁移为 `custom`，无损保留原有 Base URL、模型与 Keystore 加密 Key，绝不注入假 `gpt-4o-mini` 默认值，自定义字段留空时绝不偷偷回退至 Gemini 官方域名。
+- 多 Key 解析：新增 `SettingsStore.extractFirstApiKey`，在英文逗号分隔的多 Key 中提取首个有效 Key，复制到分析 AI 时明示「已复制首个 Gemini Key（多 Key 仅取第一个）」，避免将逗号串当成单一 Key 发送。
+- Gemini 辅助入口：提供「使用翻译服务的 Gemini Key」、「免费申请 API Key」、「查看申请教程」、「粘贴 Key」。
+- OpenCode Zen 免费候选与真实限制明确化：
+  - 依据实测证据（`docs/09-free-services-verification.md`），POST `https://opencode.ai/zen/v1/chat/completions` 使用 `public` 密钥返回 HTTP 400 `MissingSessionID: OpenCode's free tier can only be used in OpenCode`，免费接口目前限制仅 OpenCode 官方客户端使用，第三方 App 未验证可用。
+  - 本 App 绝不伪造 `x-opencode-session` 绕过限制，不将 `big-pickle` 设为已验证可用默认，Zen 入口明确展示黄色警告：「当前免费接口限制仅 OpenCode 客户端使用，本 App 未验证可用；可重新测试或切换服务」，保留候选供复测，提供「切换服务」对话框，绝不自动切换付费服务。
+  - 凭据隔离：Zen 内部固定 `public`，UI 不显示 Key 输入框，绝不向 Zen 发送 Gemini Key。
+  - 白名单与交集过滤：`OpenCodeZenCatalog` 定义官方确认的免费白名单（`big-pickle`），`filterAvailableFreeModels` 严格与远端取交集。交集为空时返回空列表并提示「远端未返回任何官方免费白名单模型，当前不可用」，绝不 fallback 伪造模型。Zen 模式下模型输入框锁定，禁止手动填入未确认的付费模型。
+  - 隐私条款：依据官方条款展示警告「免费模型可能使用提交内容改进模型，请勿发送敏感资料」，并提供「查看官方文档与隐私条款」按钮（跳转 `https://opencode.ai/docs/zen/`）。
+- 自定义服务：支持自由选择「Gemini 原生」或「OpenAI 兼容」格式，独立保存 Base URL、模型 ID 与 API Key。格式与服务地址不匹配时显式预警。
+
+**测试与验证**
+
+- 新增 `GeminiLiveProbeTest`：
+  - 测试 `buildWebSocketUrl` 对 API Key 的 query 参数安全编码与多 Key 提取。
+  - 测试 `buildSetupJson` 的数据结构、模型、`AUDIO` 模态及翻译配置。
+  - MockWebServer 模拟 WebSocket：测试 `setupComplete` 成功、setup 错误拒绝、服务端关闭（code=1008）及超时失败，确认错误提示脱敏且不泄露 Key。
+- 新增 `SecondAiServiceTest`：
+  - 精确 host 校验：通过官方域名，拒绝 `evilgoogleapis.com`、子域名欺骗及第三方反代。
+  - 迁移与凭据隔离：验证官方与自定义配置无损迁移，自定义留空不回退，Zen 返回固定 `public` 与白名单模型。
+  - Zen 白名单与负例测试：验证模型交集过滤，负例测试确认远端下线时返回空列表，验证 `MissingSessionID` 错误本地化。
+  - AiTextClient 自检契约与脱敏：严格验证 `sessionContext`/`note` 字段有效性，拒绝空 JSON 假阳性，验证密钥替换（`key=***`, `Bearer ***`, `AIza***`）。
+- `MainActivityStartupTest`：验证阶段 1 新增控件绑定及 Second AI 服务切换时的 UI 联动与状态持久化。
+- 自动化构建执行：`bash /tmp/vtuber-gradle.sh :app:testDebugUnitTest :app:lintDebug :app:assembleDebug`。
+
+**主助手复核修复：上游错误被吞导致文案误导**
+
+- 在模拟器上实点「测试分析服务」（Zen）时发现真实缺陷：请求确实发出并返回 400，但界面提示的是「请检查 API Key 和服务地址是否正确」。Zen 走内置 `public`、根本不需要用户填 Key，这个提示会把人引向错误方向。
+- 根因：`AiTextClient` 的 OpenAI / Gemini 失败分支只把响应体写进 `Log.w`，抛给调用方的是固定文案，`OpenCodeZenCatalog.localizeZenError` 拿不到 `MissingSessionID` 自然匹配不上。
+- 修复：新增 `extractUpstreamError()`，只取结构化的 `error.type` / `error.status` 与 `error.message`（截断 160 字并继续过 `sanitizeError`），不回抛整个响应体；两个失败分支改为带上游诊断信息抛出，取不到时才回落通用文案。
+- 回归：`zenAccessRestrictionSurfacesAccurateMessageNotKeyAdvice` 断言错误链路保留 `MissingSessionID`、不再出现 Key 建议且能落到 Zen 限制专用文案；`upstreamErrorExtractionDropsBodyButKeepsDiagnosis` 断言只保留诊断字段、丢弃 `details` 且非 JSON 响应返回空串。
+
+**真实验证结果**
+
+- 本地工具链：`/root/.local/share/android-build`（Temurin JDK 17.0.20.1 + Android SDK 35，校验和已核对）。
+- `bash /tmp/vtuber-gradle.sh :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` → **BUILD SUCCESSFUL**，**120 个单元测试全部通过**（0 失败 / 0 错误），Lint 无阻断错误，产出 `app-debug.apk`（13,499,923 字节）。
+- Android 35 模拟器（x86_64，KVM）实机验证：安装 APK 并逐页操作，确认
+  - 设置 → 翻译服务 真实显示「免费申请 API Key」「查看申请教程」「粘贴 Key」「测试翻译连接」及免费额度说明；
+  - 空 Key 点测试 → 「请先填写 Gemini API Key」，不产生假成功；
+  - 教程弹窗含分步说明与「前往申请」「官方与定价」入口；
+  - 背景分析 AI 三服务选择器（Gemini / OpenCode Zen 免费 / 自定义）可切换，Zen 页展示限制警告、隐私提示、凭据隔离说明与「切换服务」；
+  - 修复后再次实点 Zen 自检 → 「不可用：当前免费接口限制仅 OpenCode 客户端使用，本 App 未验证可用；可重新测试或切换服务」。
+
+**未验证项**
+
+- 真实 Google Gemini API Key 联调与真实音频 Live 翻译（测试环境中无用户提供的个人 Key）。
+- OpenCode Zen 真实第三方推理可用性（受限于上游应用层客户端限制，当前保持未验证可用警告与自检复测能力）。
+
+---
+
+## 2026-09-09 · v2.5.0 让「配置成功没有 / 这一步会改变什么 / 出错怎么办」说清楚
+
+按外部 UI 评审逐条落实，主线是把隐式状态显式化，不新增产品边界。
+
+**背景分析 AI（设置页）**
+
+- API 格式从「点一次切一次」的按钮改成 `MaterialButtonToggleGroup` 双选（Gemini 原生 / OpenAI 兼容）；切换后清空模型缓存，并检查当前服务地址是否明显不属于新格式（例如切到 OpenAI 但地址仍是 `googleapis.com`），不匹配时给橙色提示并把焦点移到地址框。
+- 新增 `AiTextClient.normalizeBaseUrl()`：粘贴的地址末尾带 `/v1`、`/v1beta`、`/v1/models` 时自动去掉，避免拼出 `…/v1/v1/chat/completions`。列模型、Gemini generateContent、OpenAI chat/completions 三条路径统一使用。路径中间的 `v1` 不动。
+- 拉取模型改为明确的加载态（按钮文字变「正在获取模型列表…」并禁用），成功后直接弹出可搜索的模型选择面板（`dialog_model_picker.xml`），面板内保留「重新拉取」；输入框仍可手动输入模型 ID。长模型名不再挤在窄下拉里。
+- 新增 `AiTextClient.probe()` 与「测试分析服务」：用当前格式 + Key + 地址 + 模型跑一次最短请求，明确回「可用」或具体失败原因。拉到列表不等于选中的模型能用。
+- 缺 Key 的提示从「未填写 API Key，无法拉取模型列表，请手动输入」改成「请先填写 API Key」并把焦点移到 Key 输入框。
+
+**视频 / 同传主页的 AI 背景**
+
+- 视频页标题下补一句用途说明：「翻译其他应用正在播放的声音。视频链接可选，用于补充翻译背景。」，解释填链接不会开始播放、不填也能用。
+- AI 结果不再直接覆盖手写资料：先落在预览卡片里（「AI 整理的背景（还没有用上）」），点「用于本次翻译」才写入输入框，并出现「撤销替换」恢复原文；「放弃」直接丢弃。手动改过输入后撤销入口自动收回，因为原文已经对不上。
+- 未配置分析 AI 时给出可点击的「去配置 ›」，直达设置子页，返回键回到发起的那个主页面，链接和输入都还在。
+- 视频模式允许只填文字、不填链接就整理（此前强制要求链接）；按钮文案随输入变化：有链接是「AI 获取视频背景」，只有文字是「AI 整理背景」。
+- 进度分两段：「正在获取视频资料…」→「正在整理背景…」，失败时能看出卡在哪一步。
+- 折叠行摘要从「已填 · 链接 · N 字」改成背景首句片段（超长截断），必要时附「· 含链接」；清除入口从 `×` 改成文字按钮「清除」。
+
+**开始 / 运行中 / 停止**
+
+- 另一模式占用录音时，两个主页都显示同一种说明横幅（原因 + 「返回同传 / 返回视频」跳转），不再只有同传单侧有文字提示。同传空闲态状态胶囊回归静态文案。
+- 连续 12 秒收不到声音才追加排查提示：视频「请确认视频正在播放；若仍无声音，该应用可能不支持音频捕获」，同传提示检查麦克风占用。短暂静音仍然只显示既有的「静音中」，不误报断线。
+- 运行页不再显示内部记录路径，改为「字幕自动保存」+「查看本次记录 ›」跳历史；真实路径仍保留在设置 → 诊断。
+- 停止确认从「停止后需要重新开始会话。」改成说明后果：字幕会保存在历史中，再次开始需要重新连接（同传）/ 重新授权音频捕获（视频）。
+
+**场景与视觉**
+
+- 场景库「设为默认」不再顺手把当前使用的场景也改掉；只改默认项，并在 toast 里说明本次仍在用哪个场景。
+- 字幕样式预览加暗色 / 明亮画面底色切换，方便判断盖到画面上是否看得清；背景滑杆补「透明—不透明」端点提示，「背景透明度」统一为「背景不透明度」。
+- 悬浮窗 `Ⅱ / ⤢ / ⇥` 换成矢量图标，触摸区 36dp → 44dp，间距 4dp → 6dp；contentDescription 明确区分「暂停翻译」和「收起字幕到屏幕侧边，翻译继续进行」。
+- 字幕回看新增「回到最新」浮动按钮（不在底部时才出现）；确认字幕不再按新旧渐隐（此前最旧一行只有 0.48 透明度），改为统一清晰、靠字号和颜色与当前行拉开层级。
+- 文案统一：内容分析 AI → 背景分析 AI、模型名 → 分析模型、Base URL → 服务地址（Base URL）、本场视频 → 视频背景、本场背景与资料 → 补充背景与翻译要求、开始视频字幕 → 开始翻译、等待原文输入… → 等待识别到语音…、连接主动轮换 → 定期重新连接。
+
+**顺手清理**
+
+- 删掉 `SessionContextAccess.clearAfterSuccessfulStart`：没有任何生产调用方，只有实现和测试假对象在用，属于 CLAUDE.md 点名的「只被测试用到的抽象」。
+- `ModeHomeViews` 移除已无人写入的 `idleStatus` / `idleSubStatus` / `transcriptPath`；`findConfirmedScrollParent` 的父链查找换成布局里直接绑定的 `NestedScrollView`。
+
+**版本**：2.4.1 / 36 → **2.5.0 / 37**（`build.gradle.kts`、README、CLAUDE.md 已同步）。`update.json` 仍指向 2.4.1，发布 Release 时再更新。
+
+**验证**：本会话容器的出站代理拦截 `dl.google.com`（403），Android Gradle Plugin 无法下载，`./gradlew` 在本地跑不起来，因此单元测试、Lint 和 `assembleDebug` 全部由 GitHub Actions `android-debug.yml` 在本分支手动触发验证。本地已完成 `git diff --check` 与全仓库 XML 结构校验。
+
+第一次 CI（`43d1558`）编译与 Lint 通过，95 个测试里 1 个失败：新加的 `settingDefaultSceneKeepsTheSceneUsedThisTime`。原因是测试前提写错了——`TranslationPlanStore.loadDraft` 在从未保存过草稿时回退到 `SceneLibraryStore.default()`，所以「没手动选过场景」时改默认顺带改本次使用本来就是对的行为。改成先显式保存一个使用中的场景、再把另一个设为默认，验证的才是真正的回归点。
+
+第二次 CI（`3b6c581`，即本次分支 HEAD）全绿：Run [34419131727](https://github.com/xieyuanqing/vtuber-live-translate/actions/runs/34419131727) 的 `headSha` = `3b6c5819c7fa386111b61d3d61c7ad346590b72f`，与目标提交一致；`:app:testDebugUnitTest`、`:app:lintDebug`、`:app:assembleDebug` 全部 success，产出 `LiveTranslate-debug-apk` artifact（5,220,991 字节，未过期）。真机安装与逐页手感仍需自行验证，本次只做到 CI 级别。
+
+新增/调整的测试：`AiTextClientListModelsTest` 补 `normalizeBaseUrl` 与「粘贴 /v1 不重复拼接」；`MainActivityStartupTest` 补占用横幅文案、空闲态不显示横幅、「设为默认」不改本次场景，并把新控件加入启动绑定清单；`SubtitleOverlayWindowTest` 的收起按钮类型改为 `ImageView`。
+
+---
+
+## 2026-09-07 · 设置页整理与移除好友网关
+
+- 按常用设置、场景与辅助、维护重新组织入口；保留现有子页与返回导航。
+- 移除 App 好友绑定、设备签名、凭据模式及服务端、专用测试与 CI；保留个人 Key、自定义地址和两种内容分析接口。
+- 自定义连接地址、翻译高级参数、字幕断句参数默认折叠；字幕页新增字号、背景和行数预览，样式滑杆支持触摸与键盘操作保存。
+- 模型列表使用当前输入配置，修改 Key、地址或格式会清空旧列表并忽略旧请求结果；失败后允许重试。
+- 恢复翻译参数不再重置同传/视频的语言及场景草稿。
+- 保留旧凭据文件的系统备份排除规则，仅防止升级前留存的敏感数据被备份；没有保留网关运行逻辑。历史日志不反向改写。
+- 版本保持 2.4.1 / 36，本次不发布新版。
+
+验证：本地 Gradle 因网络不可达无法下载发行包；远端测试、Lint 和构建结果将在 PR 中记录。
+
+
+---
+
+## 2026-08-01 · 悬浮窗打开主应用 + AI 模型远端下拉
+
+- 视频字幕悬浮窗头部在「暂停」与「收起」之间新增 `⤢` 按钮，点击以 `FLAG_ACTIVITY_NEW_TASK` 启动 `MainActivity`，系统会把现有实例提到前台、不重启会话，省去下拉通知栏再回 App 的割裂操作。展开态可见、收起态随容器隐藏，行为与暂停/收起一致。
+- 设置 → 内容分析 AI 的模型名从手动 `TextInputEditText` 改为 `MaterialAutoCompleteTextView`（带框 ExposedDropdown，避开语言胶囊那种 `boxBackgroundMode=none` 启动崩溃坑）：点开下拉若未拉过则自动拉取远端模型列表，旁置「刷新模型列表」按钮可显式重拉，输入框仍可手动覆盖。
+- 拉取来源按凭据模式分流：好友网关已绑定（`FriendGatewayStore.isActive`）时走 `GET {gateway}/gateway/v1beta/models` 带设备签名，否则走用户配置代理（Gemini 原生 `GET {base}/v1beta/models` 过滤 `generateContent` 项，OpenAI 兼容 `GET {base}/v1/models` 取 `data[].id`）。列表为空或拉取失败时显示橙色警告「远端未返回模型，请自行输入模型名」，并保留手动输入兜底。切换 API 格式后旧列表失效、自动清空并标记需重新拉取。
+- 好友网关此前只有 `POST /gateway/v1beta/models/:generateContent`，缺列模型端点。补 `GET /gateway/v1beta/models`，同样走 `_authenticate` 设备签名鉴权，以 Gemini 标准格式返回 `allowed_text_models`，确保好友模式下 App 仍从网关拉真实可用列表、不绕过签名直连官方，符合「持有者代理」边界。
+
+**版本**：不变，保持 2.4.1 / 36。
+
+**验证**：网关新增 `test_models_list_returns_allowed_text_models_behind_auth`（无签名 401 + 有签名返回 allowed 列表），全量 9 项 friend_gateway API 测试通过；App 新增 `AiTextClientListModelsTest`（Gemini 过滤 / OpenAI / 网关路径带签名 / 空列表），`./gradlew :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 全部通过，`git diff --check` 干净。
+
+---
+
+## 2026-07-21 · v2.4.1 多平台网页分析正式版
+
+- 版本升级为 **2.4.1 / versionCode 36**，`update.json` 与正式 Release 统一指向 `v2.4.1/LiveTranslate-2.4.1.apk`。
+- 汇总 2.4.0 之后的字幕稳定性修复：保留同一碎片中的多句结果、历史改为后台单线程写入、确认字幕增量追加，并修正“聆听中”状态判断。
+- 修复检查更新把小数版本号误当 versionCode 的问题，并清理术语库残留及无生产调用的旧抽象。
+- AI 视频链接分析扩展至 YouTube、哔哩哔哩、Twitch；其他公网播放页面通过 Jina Reader 提取受限文本并走独立的不可信网页 Prompt。
+- 历史详情新增红色删除按钮和二次确认；活动会话拒绝删除，避免后台写回；同时修复本场背景大椭圆样式。
+- Release 继续使用仓库固定 Debug 签名，可覆盖安装同签名旧版；发布 APK 以本次版本提交的 GitHub Actions 产物为准。
+
+---
+
+## 2026-07-21 · 历史删除与通用网页分析
+
+- 历史详情页在“分享 / 复制”旁新增红色删除按钮；点击后必须二次确认，确认成功才删除私有目录中的当前会话并返回刷新后的历史列表。仍在写入的活动会话会拒绝删除并提示先停止翻译，避免记录被后台重新创建。
+- YouTube、哔哩哔哩和 Twitch 继续走专用元数据接口；其他公网 HTTP(S) 页面自动改走 Jina Reader JSON 接口，不需要新增 API Key。
+- 通用抓取在服务端限制 3000 tokens，本地再限制为 12000 字符；去除链接和媒体 URL。发送前解析域名的全部 A/AAAA，并拒绝单标签/内网域名、本地/私网/保留地址、带凭据 URL、非标准端口及不安全最终重定向。
+- 内容分析拆成“已知平台元数据”和“通用网页文本”两套 Prompt。网页正文始终标记为不可信资料；登录页、拦截页或内容不足时必须返回空背景和明确失败说明，不允许猜测。AI 整理出的本场背景在最终实时 Prompt 中仍按不可信数据隔离，并在其后重新声明固定翻译规则，阻断二阶 Prompt Injection。
+- 用户在 Jina 抓取期间修改或清空输入会立即使旧请求失效，不再继续调用内容分析 AI；空背景时显示 AI 返回的具体失败说明。
+- README 补充功能说明与完整 Jina URL（含 query）第三方披露，视频页输入提示同步改为支持其他公网播放页面。
+
+**版本**：不变，保持 2.4.0 / 35。
+
+**验证**：删除交互先失败后转绿；MockWebServer 覆盖 Reader 成功、限流、目标 HTTP 错误、空正文、私网 DNS 和不安全重定向；应用生产客户端在 DNS 安全校验后真实读取 `example.com` 成功。完整 94 项单测通过，Lint 0 Error，Debug APK 构建成功（SHA-256 `60d8b8539e8ab31ff88b9211c7ca5d25bbf973b809e9a34f13655a94cde6d734`）。
+
+---
+
+## 2026-07-21 · 修复历史详情背景大椭圆
+
+- 历史详情的“本场背景”文本错误复用了语言选择器的 `bg_language_pill`；其 `999dp` 胶囊圆角在长文本区域被拉伸成大椭圆。
+- 新增历史背景专用 drawable，使用浅灰底和 `12dp` 普通圆角，不再显示椭圆描边。
+- 新增 Robolectric 布局回归测试，明确约束历史背景圆角不能退回语言胶囊样式。
+
+**版本**：不变，保持 2.4.0 / 35。
+
+**验证**：回归断言修复前按预期失败、修复后通过；完整 87 项单测通过，Lint 0 Error，Debug APK 构建成功。
+
+---
+
+## 2026-07-21 · AI 视频分析支持哔哩哔哩与 Twitch
+
+- 将仅支持 YouTube 的元数据入口统一为 `VideoMetadataClient`，自动识别 YouTube、哔哩哔哩和 Twitch 链接。
+- 哔哩哔哩覆盖普通视频、直播间与 `b23.tv` 短链；Twitch 覆盖频道直播、VOD 与 Clip。
+- AI 整理输入新增平台、分区/游戏和简短简介，整理结果仍只写入视频模式的本场临时上下文。
+- 新增 URL 规范化、伪域名拒绝、严格数字 ID、短链跳转边界、三平台响应解析与错误处理单测。
+- 外部标题与简介按不可信 JSON 资料交给内容分析 AI，不向第二 AI 发送视频 URL，也不把原始元数据直接写入实时翻译 Prompt。
+- Activity 销毁时使分析请求失效，并在元数据抓取后再次检查请求状态，避免继续发起无效的 AI 请求。
+
+**版本**：暂不改，随下一次 Release 统一升版并更新 `update.json`。
+
+**验证**：新增与相关单测通过；使用应用自身 Kotlin 客户端真实请求三平台共 6 类链接全部成功。完整单测、Lint 与 APK 构建见本次提交验证记录。
+
+---
+
+## 2026-07-20 · CLAUDE.md 新增「避免过度设计与死代码」约定
+
+- 承接上一条清理，把根因写进约束，防止复发：删功能要删干净（连数据模型/Store/Prompt/测试一起删并全局搜索确认零引用）、不写投机抽象、防御只对应真实故障、改前先确认代码在用。
+- 明确指向「容易踩的坑」里已记录的真实防御，避免以后被当成过度设计误删。
+- 纯文档约定，无代码与版本改动。
+
+---
+
+## 2026-07-20 · 清理过度设计与死代码
+
+对照「GPT 爱过度设计」的自查，清掉为想象需求写的抽象、删功能没删干净的残留、以及会造成错误结果的多余兜底。核心实时管线（连接轮换、快照冻结、音频回退、悬浮窗竞态、网关签名限流）都是有记录的真实事故防御，保留不动。
+
+- **术语库死链彻底清除**（唯一有运行时成本的）：删除零引用的 `GlossaryStore.kt`、`GlossaryProfile.kt`；`ContentContextAnalyzer` 去掉 `glossary` 字段、解析逻辑与 systemPrompt 里的术语库 JSON 段——此前每次内容分析都在为从不被读取的术语库输出付 token 和延迟（生产链路只用 `sessionContext` 和 `note`）。
+- **UpdateChecker 误报兜底**：删掉 `extractVersionCode` 最后一级「versionName 数字拼接」，它会把 `2.4.0` 解析成 `240`，让已装最新版的用户永远看到更新提示；保留显式字段 → body `versionCode:` → 纯数字 tag 三级。
+- **MainNavigator 投机抽象**：删除 `NavigationDestination`、`accessGate`（导航访问控制）、`onDestinationShown`（导航审计）——生产代码从未传入这两个钩子，唯一使用者是为测试它们而写的用例。退回普通 pageId 回调，重写对应单测。
+- **零散死代码**：`HistoryStore.read()/rename()`（无入口）、`SettingsStore.secondAiEnabled` 开关（从未接线）、`StatusBus.startSession(nowMs)` 单参重载（仅测试用）、`SessionCoordinator` 旧布尔状态兼容层（`saveState` 已总是写新 stage，回退不可达）、minSdk 29 下恒真的 `SDK_INT >= 26/28` 分支（`UpdateInstaller`、`UpdateController`）。
+- **文档**：CLAUDE.md 文件表把不存在的 `ProfileGenerator.kt` 修正为实际的 `ContentContextAnalyzer.kt`。
+
+**版本**：不变，保持 2.4.0 / 35。纯内部清理，无新增用户可见功能；仅修复检查更新误报。
+
+**验证**：本地 Android 工具链无法验证——egress 策略拦截 `dl.google.com`（AGP 8.7.3 拉取 403），Gradle wrapper 发行版下载亦被 GitHub 403。改由 GitHub Actions `workflow_dispatch` 在本分支跑 `testDebugUnitTest + lintDebug + assembleDebug`：Run `29719156454`（#44）成功，`headSha` 精确匹配提交 `6203a14`，产物 `LiveTranslate-debug-apk`（5,257,545 字节，sha256 `e41f9b6dbee92c3c98f00da25dd6cc5c9612e9badba10e37c22baeddde055337`）。
+
+## 2026-07-19 · 实时字幕稳定性修复（CI 构建）
+
+- 不改变既有音频积压策略与连接参数。
+- 修复同一服务端碎片包含多句时只保留最后一句的问题。
+- 历史 JSON 保存移到单线程后台写入，避免确认字幕时阻塞主线程与悬浮窗更新。
+- C6 生产链路确认行上限补齐为 80；运行页改为增量追加，用户上滑时暂停自动跟随。
+- 「聆听中…」只按译文更新时间计算，原文输入不再错误重置计时。
+
+**版本**：保持 2.4.0 / 35；只发布 GitHub Actions Debug APK，不创建新 Release。
+
+**验证**：定向单测与编译检查通过；推送 `c8534c8` 后 GitHub Actions `Android Debug Build` 运行 `29690605781` 成功（`headSha` 精确匹配）；产物 `LiveTranslate-debug-apk`，包名 `com.xyq.livetranslate`，`2.4.0 / 35`，APK v2 签名校验通过。
+
+---
+
+## 2026-07-19 · v2.4.0 首个正式版：检查更新
+
+- 版本 **2.4.0 / 35**。
+- 新增 `UpdateChecker` / `UpdateDownloader` / `UpdateInstaller` / `UpdateController`。
+- 清单源：`update.json`（GitHub raw → jsDelivr → ghproxy）与 Releases API 兜底。
+- 下载源：GitHub Release APK → ghproxy / mirror.ghproxy 镜像。
+- 关于页：自动检查开关、手动检查、失败小字提示。
+- 弹窗：更新说明、下载并安装、忽略此版本、稍后。
+- FileProvider 安装 APK；未知来源权限返回后续装。
+- 仓库根目录 `update.json` 与 GitHub Release `v2.4.0` 配套。
+
+**验证**：单元测试解析清单；CI assemble + test；Release 产物以 Actions APK 为准。
+
+---
+
+## 2026-07-19 · UI 交互增强阶段 C（C1–C9）
+
+按 `docs/08` 完成阶段 C 主要交互项（C6 列表未改 RecyclerView，改为全量展示 StatusBus 确认行并自动滚底）。
+
+- **C1** 运行页 `btnInterpPause` / `btnVideoPause`，读 `StatusBus.paused` 显示暂停/继续。
+- **C2** 启动成功不再 `clearAfterSuccessfulStart`；折叠行加 × 清除；去掉「只对本场翻译生效」说明。
+- **C3** 停止按钮弹确认框。
+- **C4** `PendingSessionStage.WAITING_OVERLAY` + `onHostResume` 授权后自动续跑。
+- **C5** 语言胶囊 `⇄` 交换源/目标；`auto` 源禁用并 toast。
+- **C6** 确认行展示上限由 6→随 StatusBus 80；新字幕尽量滚底。
+- **C7** 运行态派生「静音中 / 聆听中…」（电平与 `lastSubtitleAtMs`）。
+- **C8** 悬浮窗收起态可纵向拖动，x 贴边。
+- **C9** 空会话（无字幕且 <10s）不落盘；历史详情加系统分享。历史列表 RecyclerView 未做（仍 LinearLayout + B4 分组）。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI；暂停/确认停止/交换/折叠清除/悬浮窗拖动/分享需真机确认。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 B5：设置页分组合并
+
+设置页合并为「翻译 / 系统」两组，降低分组噪声。
+
+- 翻译：翻译服务 / 场景库 / AI 内容分析
+- 系统：字幕与悬浮窗 / 诊断 / 关于
+- 全部 `rowSet*` ID 保留，导航与返回栈不动。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 B4：历史页改造
+
+历史列表标题改为场景名、按日期分组、去掉手动刷新。
+
+- 删 `btnRefreshHistory`；进入历史 Tab 仍走现有自动 `reload`。
+- 列表插入「今天 / 昨天 / yyyy-MM-dd」分组头；卡内时间只显示 `HH:mm`。
+- `tvHistoryItemTitle` = 场景名（非自动标题时保留自定义标题）；`tvHistoryItemMode` gone；meta = 语言方向 · 时长。
+- 测试同步：childCount 含分组头，标题断言场景名。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 B3：场景库列表选择器化
+
+场景库从大卡操作区改为紧凑行选择器：整行点选使用，更多操作用 ⋯ 菜单。
+
+- `item_scene_preset`：删头像与四常驻按钮；名称 + 单行提示词 + ✓/★ 标记 + `btnSceneMore`。
+- `page_scene_library`：恢复默认移到列表底部小字。
+- `SceneLibraryController`：行点击 `useScene`；PopupMenu 编辑/设默认/删除。
+- 测试 `sceneUseRefreshesHomeDependentsThroughControllerCallback` 改为 `card.performClick()`。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI。PopupMenu 与密度需真机确认。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 B2：视频页结构改造
+
+视频空闲态对齐同传：场景行 + 横滑 chips + 本场折叠；主 CTA 固定底部；权限卡改为缺权限警告横幅。
+
+- 布局：`videoIdleContent` 改为垂直 LinearLayout（NestedScrollView weight1 + 底部 `btnToggle`）；`cardVideoPlan` 改为场景行；`rowOverlayPermission` 改为警告横幅默认 gone。
+- `ModeHomeController.renderOverlayPermission`：已授权整行 GONE，未授权显示「悬浮字幕未授权」。
+- `SessionContextController` 视频本场折叠与摘要（链接 / 字数）。
+- 新增 `bg_warning_banner` / `bg_warning_dot`。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI。固定 CTA、折叠与权限横幅需真机确认。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 B1：同传页结构改造
+
+同传空闲态去噪：去掉「当前场景」大卡与 prompt 原文，场景改为标签 + 摘要 + 单行横滑 chips；本场背景默认折叠。
+
+- 布局：`cardInterpPlan` 改为场景行容器（保留 ID）；`chipGroupInterpHomeScenes` 外包 `HorizontalScrollView` + `singleLine`；本场上下文包进 `interpSessionContextBody`，入口 `rowInterpSessionContextToggle`。
+- `ModeHomeController.updatePlanSummary` 只写场景名与语言方向，隐藏 `tvInterpProfile`。
+- `SessionContextController` 负责同传本场折叠/摘要「已填写 · N 字」。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI。折叠与 chips 横滑需真机确认。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 B0：主 Tab 去掉双标题
+
+主 Tab 隐藏 `MaterialToolbar`（logo +「流译」），只保留各页 `PageTitle`；子页仍显示 Toolbar 返回箭头与页名。
+
+- `MainNavigatorViews` 绑定 `pageContainer`。
+- `renderMain`：`toolbar.visibility=GONE`，并把状态栏高度补偿到 `pageContainer.paddingTop`。
+- `openSub`：恢复 Toolbar 可见与返回图标，取消 pageContainer 顶部补偿。
+- 测试：`MainNavigatorTest` 覆盖主 Tab 隐藏 / 子页显示 / 返回后恢复；启动测试绑定 `pageContainer`。
+
+**版本**：保持 2.3.1 / 34。
+
+**验证**：本地无 SDK，依赖 CI。导航显隐需真机确认状态栏不被遮挡。
+
+---
+
+## 2026-07-19 · UI 去噪阶段 A：文案与图标清理
+
+按 `docs/08-ui-declutter-plan.md` 完成阶段 A（零结构风险）：
+
+- **A1/A2 文案**：清掉用户可见「方案」旧词；同传/视频本场说明改为「只对本场翻译生效」；删除场景库顶部产品边界说明段；`tvInterpAnalyzeStatus` / `tvVideoAnalyzeStatus` 空闲默认文案置空并 `gone`（ID 保留，AI 整理进行中再显示）。视频链接 hint 改为「YouTube 链接（用于 AI 解析背景）」，去掉重复 helper。
+- **A3 图标**：新增 `ic_key_24` / `ic_layers_24` / `ic_sparkle_24` / `ic_info_24` / `ic_add_24`；设置页翻译服务/场景库/AI 内容分析/关于与场景库 FAB 不再复用 App logo。
+- **A4 状态点**：新增 `bg_idle_dot`，同传空闲 pill 改灰点；运行态成功点仍用 `bg_success_dot`。
+- **代码**：`SessionContextController` 增加 `showAnalyzeStatus`，写入状态时恢复可见，避免默认 `gone` 后分析反馈看不见。
+
+**版本**：保持 versionCode 34 / versionName 2.3.1（纯文案与图标，不升版）。
+
+**验证**：布局内用户可见文案无「方案」；设置四行语义图标互不相同；同传空闲点为 idle 灰；`git diff --check` 通过。本容器无 Android SDK，单测/Lint/assemble 依赖 CI。空闲态灰点与 AI 状态显隐需真机确认。
+
+---
+
+## 2026-07-18 · MainActivity 拆分完成（步骤 1–6）
+
+把大型 `MainActivity` 按 `docs/07-mainactivity-refactor.md` 拆成页面 controller 与协调器，行为不变，只改代码归属。
+
+**落地**：
+
+| 步骤 | 提交 | 产物 |
+|---|---|---|
+| 1 历史 | `8332e8b` | `ui/HistoryController` |
+| 2 场景库 | `0a6d836` | `ui/SceneLibraryController` |
+| 3 设置 | `e60ec96` | `ui/SettingsController` |
+| 4 会话 | `ed00289` | `ui/SessionCoordinator` + `PendingSessionSnapshot` |
+| 5 主页/本场 | `1171ed7` | `ui/ModeHomePages`、`SessionContextController`、`UiRuntimeStatus` |
+| 6 导航 | `bca032c` | `ui/MainNavigator` |
+
+相关护栏：`3e44318` 会话启动快照边界测试；`24cf8f9` 场景模式重复渲染修复。
+
+**结果形态**：
+
+- `MainActivity` 约 269 行，只保留生命周期、`ActivityResultLauncher`、controller 接线、300 ms `UiRuntimeStatus` 分发、窄 `SessionHost` 与测试入口。
+- 每个主页 View 单一绑定真源；同传/视频 `ModeHomeViews` 由主页与本场上下文共享。
+- 权限/投屏前冻结内容与模式快照；Service 侧仍在真正启动时解析访问与运行参数。
+- 未改 `res/layout/`、未升版本号、未改实时翻译管线，也未实现账号/订阅等 SaaS 占位。
+
+**版本**：保持 versionCode 34 / versionName 2.3.1（纯结构重构，不升版）。
+
+**验证**：
+
+- 各步独立提交；`main` 最新 `bca032c` 对应 Android Debug CI 成功。
+- 真机冒烟通过：四 tab、场景库、历史详情、设置子页、旋转/重建恢复、权限拒绝、同传启动、视频投屏取消、overlay 设置入口。
+- 施工文档状态已改为「已完成」，见 `docs/07-mainactivity-refactor.md`。
+
+---
+
+## 2026-07-18 · v2.3.1 修复语言胶囊点击不弹、无法切换语言
+
+现场发现主页语言胶囊点了没反应，源/目标语言根本切不了。排查确认是**历史遗留缺陷**（`8ea4faa` 基线即存在，非本轮合并引入）：
+
+- 语言胶囊为规避旧的 `ExposedDropdownMenu + boxBackgroundMode=none` 启动 `InflateException`，改用 `OutlinedBox.Dense + endIconMode=none`。代价是没有 `DropdownMenuEndIconDelegate` 来响应点击，而 `MaterialAutoCompleteTextView` 又是 `inputType=none` 不可编辑，于是点击既不弹下拉也无法输入，语言被“锁死”。
+- 修复：在 `bindModeLanguageControls` 里为四个下拉手动接 `setOnClickListener { showDropDown() }`，恢复“点击即弹出选项”，不改动会闪退的样式组合。
+- 新增回归测试 `languageDropdownsOpenOnTap` 断言四个语言下拉都挂了点击监听。
+- CLAUDE.md 踩坑条目补充说明：`endIconMode=none` 必须配手动 `showDropDown`，勿删。
+
+**版本**：versionCode 34 / versionName 2.3.1。
+
+**验证**：`git diff --check` 通过；单测与 `assembleDebug` 由 CI 执行。注意：这是触摸交互修复，CI 只能验证编译、启动与点击监听存在，**下拉真正弹出需真机/模拟器确认**。
+
+---
+
+## 2026-07-18 · v2.3.0 方案库并入场景库，场景成为唯一长期配置
+
+语言解绑后方案只剩「名字 + 场景引用 + 额外提示词」，与场景（名字 + 提示词）高度重复。本次把两者合并：
+
+- **数据层**：`TranslationPlan` 移除 `advancedInstruction`，草稿 = 语言 + 场景引用；`TranslationPlanStore` 删除命名方案 CRUD（`SavedTranslationPlan`/`saveAs`/`updateSaved`/`applySaved`/`deleteSavedPlan`），新增一次性迁移 `migrateLegacySavedPlans`：带额外提示词的旧方案折算为场景（提示词 = 原场景提示词 + 方案额外提示词），纯别名不生成重复场景，迁移后清空旧存储。
+- **Prompt**：`PromptBuilder` 移除【方案提示词】段，长期偏好统一写进场景提示词。
+- **UI**：删除方案库页、方案编辑器 BottomSheet 与相关布局；场景库升级为统一入口——场景卡新增「使用」按钮与「使用中」标识，动作为 使用 / 设为默认 / 编辑 / 删除；主页「当前方案」卡改为「当前场景」，点击直达场景库并按模式预选；设置页只保留场景库一行。保留 `cardInterpPlan`/`btnInterpOpenPlanLibrary` 等既有 View ID 复用绑定。
+- **文档**：CLAUDE.md 边界第 2/4/5/8 条改写（场景库是唯一可复用配置层，不要恢复方案层），README 同步。
+- **测试**：重写 `TranslationPlanStoreTest`（草稿隔离、场景引用回退、迁移一次性与旧字段忽略），`MainActivityStartupTest` 移除方案页用例、新增主页卡直达场景库用例，`PromptBuilderTest` 移除方案提示词断言。
+
+**版本**：versionCode 33 / versionName 2.3.0。
+
+**验证**：`git diff --check` 通过；本容器无 Android SDK，单测与 `assembleDebug` 由 CI 执行（结果见提交后 CI Run）。
+
+---
+
+## 2026-07-18 · 语言方向与方案解绑，随时可调
+
+把语言方向从翻译方案里解耦，让它成为每模式独立、随时可调的运行时选择，不再被套用方案覆盖：
+
+- **根因**：`TranslationPlanStore.applySaved` 原先 `saveDraft(整个方案)`，套用已保存方案会把当前草稿的语言一起顶掉——语言被“绑死”在方案里。
+- **改法**：`applySaved` 改为读当前草稿、只套用方案的场景与长期提示词、保留当前语言方向后再写回；方案编辑器（`TranslationPlanBottomSheet` + `bottom_sheet_translation_plan.xml`）移除源/目标语言选择器，方案只剩 名称 + 场景 + 长期提示词；方案库卡片不再显示语言方向，避免展示一个套用时被忽略的语言。
+- 语言仍存在草稿里、由同传/视频主页的语言胶囊设置、启动时进快照（冻结逻辑与模式隔离不变）。
+- 同步 CLAUDE.md 边界第 4 条：方案只引用场景 ID 与额外提示词，语言不绑进方案。
+- 新增单测 `applyingSavedPlanKeepsCurrentLanguageAndOnlyTakesSceneAndPrompt`。
+
+**验证**：`git diff --check` 通过。本容器无 Android SDK，单测与 `assembleDebug` 依赖 CI；改动为纯逻辑与布局删减，无新增依赖。
+
+---
+
+## 2026-07-17 · v2.2.0 好友网关并入主线并收口文档与 CI
+
+将 `test/friend-invite-gateway` 整体合并进主线，把好友邀请网关从实验分支正式纳入产品，并补齐配套护栏：
+
+- **合并**：fast-forward 合入好友网关三提交（网关后端、悬浮字幕侧边收起、好友 Live 签名路径修复），无冲突。
+- **版本收口**：`versionName` 从预发布 `2.2.0-friend.3` 定稿为 `2.2.0`，`versionCode` 维持 32；同步 README 徽章与当前状态。
+- **文档边界**：CLAUDE.md 项目定位与产品边界原写“不建设后端/账号/跨设备”，与已落地代码矛盾。改写为“默认纯本地、好友网关是唯一且可选的后端，作用域仅限好友分享，不是账号体系”，并新增边界第 10 条约束 `ApiCredentialMode` 双路径与“不得滑向账号体系”。README 隐私段同步修正，并说明网关只维护绑定/令牌/限流、不保存音频或字幕内容（依 `store.py` 仅有 `invites/bind_challenges/auth_nonces/usage_daily` 四表核实）。
+- **CI**：新增 `.github/workflows/friend-gateway.yml`，在 `server/friend_gateway/**` 变更时用 uv 安装依赖并跑 `pytest`，补上原 Android CI 不覆盖后端的缺口。
+
+**版本**：versionCode 32 / versionName 2.2.0。
+
+**验证**：`server/friend_gateway` 本地 `uv run pytest` 11 项全过；`git diff --check` 通过。Android 侧本容器缺少 JDK 17 与 Android SDK，无法本地构建；本次在 Android 可编译代码上的改动仅 `versionName` 字符串，`assembleDebug` 与单测/Lint 依赖 CI 与合入前 `v2.2.0-friend.3` 记录的完整验证（53 项测试 0 失败、APK 签名通过）。
+
+---
+
+## 2026-07-17 · v2.2.0-friend.3 修复好友实时翻译无法连接
+
+修复好友邀请码通道下，内容分析正常但同传/视频实时翻译长期停在黄色“准备连接”的问题：
+
+- 根本原因是好友 Live 在生成设备签名时直接对 `wss://` 地址调用 OkHttp `String.toHttpUrl()`；该 API 只接受 `http/https`，会在 WebSocket 握手发出前抛出 `IllegalArgumentException`
+- 个人 API Key 路径不需要设备签名，因此不触发；好友内容分析使用 `https://`，也不触发，这解释了两条链路表现不一致
+- 改为通过 `Request.Builder.url()` 对 `ws/wss` 地址做 OkHttp 原生规范化，再从规范化结果读取签名 path
+- 新增 `wss://translate-test.994431.xyz/gateway/ws/...` 回归测试，防止签名路径解析再次阻断好友 Live
+
+**版本**：versionCode 32 / versionName 2.2.0-friend.3。
+
+**验证**：真实 OkHttp 4.12.0 行为验证确认 `Request.Builder.url(wss://...)` 可用而 `HttpUrl.get(wss://...)` 抛错；公网好友网关端到端握手获得 HTTP 101 与 Gemini `setupComplete`。本地 `clean :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 全量成功；11 个测试报告共 53 项测试，0 failures / 0 errors / 0 skipped；`git diff --check` 通过。Debug APK 为 `com.xyq.livetranslate` / versionCode 32 / versionName 2.2.0-friend.3 / minSdk 29 / targetSdk 35，大小 `13,386,581 bytes`，APK Signature Scheme v2 验证通过，SHA-256 为 `bd35d8f507a977172f0368c86295aff7da945b726e545d4b8f3626fdda740297`。
+
+---
+
+## 2026-07-17 · v2.2.0-friend.2 悬浮字幕真实设备修正
+
+根据真实设备截图修正视频悬浮字幕：
+
+- 移除 `WRAP_CONTENT` 根窗中的 `MATCH_PARENT` 高度装饰子 View，改由根 View 自绘蓝色强调条，避免部分 ROM 将半透明悬浮层测成整屏并压暗整个画面
+- 展开态改为约屏幕宽度 88%、最大 360dp 的可拖动字幕面板，不再贴满屏幕宽度
+- 原“紧凑字幕”改为真正的侧边收起：点击右上角收起键后吸附到最近屏幕边缘，仅保留 44×60dp 小胶囊；点击胶囊恢复原位置
+- 收起只改变悬浮层外观，不发送暂停或停止指令；暂停按钮继续作为独立操作
+- 新增悬浮窗几何与 WindowManager 实例测试，覆盖根窗非全屏约束、展开尺寸、宽屏上限、紧凑屏适配、左右吸附、收起/恢复和纵向边界，并验证收起不改变暂停状态
+
+**版本**：versionCode 31 / versionName 2.2.0-friend.2。
+
+**验证**：`clean :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 全量成功；11 个测试报告共 52 项测试，0 failures / 0 errors / 0 skipped；`git diff --check` 通过。Debug APK 为 `com.xyq.livetranslate` / minSdk 29 / targetSdk 35，大小 `13,386,377 bytes`，APK Signature Scheme v2 验证通过，SHA-256 为 `a86c0671e922550fdf7bba72124a2f73a734b8788aa30cfb7d9fc77178f250b5`。
+
+---
+
+## 2026-07-17 · v2.1.0 可编辑场景库与精简 Prompt
+
+将原先由代码直接解析的固定场景预设改为本地可编辑场景库，场景配置从翻译方案中独立出来。
+
+**场景与方案**：
+- 同传和视频分别维护场景列表与默认场景，支持新建、编辑、删除、设为默认和恢复初始化模板
+- `DefaultSceneCatalog` 只负责首次初始化和用户主动恢复；运行时统一从 `SceneLibraryStore` 读取
+- `TranslationPlan` 只保存场景 ID、语言方向和方案级额外提示词，不再维护重复的自定义场景说明
+- 删除场景后，草稿和命名方案在展示或应用时临时回退到当前默认项；无关方案 CRUD 不会改写原始场景 ID
+
+**Prompt 与会话**：
+- 不可编辑的翻译底座精简为三条中性规则，模式层只描述麦克风或视频音频的输入差异
+- 场景提示词、方案提示词和本场上下文分层组合；会议、课堂、直播等具体偏好全部下放到可编辑场景
+- 会话启动时冻结完整 Prompt、规范语言代码、场景 ID 和场景名称；`CaptureService` 拒绝缺字段或非法语言代码快照
+- `StatusBus` 与历史记录保存启动时的场景名称，后续重命名或删除不改变运行中会话和既有历史
+
+**界面与正确性**：
+- 设置页新增场景库入口，方案编辑器支持直接进入对应模式场景库；存在未保存修改时先确认放弃
+- 首页快捷场景动态读取本地场景并强制保持单选；删除/恢复引用场景后仍选中解析出的有效项
+- 从方案库进入场景库时，返回键先回方案库；Activity 重建后保留主 Tab、父页和同传/视频模式
+- 损坏场景库只提供只读内存回退，普通 CRUD 不覆盖原始值，只有用户明确恢复模板时才重建
+- 按已确认的个人自测项目边界直接启用 v3 方案存储，不增加旧测试数据迁移层
+
+**验证**：`clean :app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 全量执行成功；6 个测试套件共 35 项测试，0 failures / 0 errors / 0 skipped；Android Lint 为 0 errors、205 warnings；`git diff --check` 通过。Debug APK 元数据为 `com.xyq.livetranslate` / versionName `2.1.0` / versionCode `29`，大小 `13,176,733 bytes`，APK Signature Scheme v2 验证通过，SHA-256 为 `79a7fe4ec1d581d7543a56a3bc80c45bae02ab2e0f4a32ca95689835f64cc562`。
+
+---
+
+## 2026-07-17 · 仓库文档与主线发布整理
+
+为准备合并 `main`，按当前 v2.0.7 代码重写仓库入口文档：
+
+- 重写 `README.md`：补齐真实功能、架构、技术栈、构建、首次使用、权限、隐私、CI、项目结构、限制和许可证状态
+- 新增 `docs/README.md` 作为当前文档与历史资料的统一索引
+- 重写 `CLAUDE.md`，修正本地构建环境和已移除术语库等过时说明，明确会话快照与模式隔离约束
+- 更新路线图当前状态、Prompt 组合说明和 UI 实施状态，保留旧计划与旧日志作为历史记录
+- 修正内容分析客户端中仍把 Google Search 限定为 VTuber 场景的过时注释，不改请求逻辑
+
+**验证**：全部 Markdown 相对链接检查通过（0 个断链）；README 经 GitHub GFM API 实际渲染；文档敏感信息扫描 0 命中；`git diff --check` 通过；`:app:testDebugUnitTest :app:lintDebug :app:assembleDebug` 构建成功。
+
+**版本**：纯文档与仓库整理，不修改 v2.0.7 / versionCode 28。
+
+---
+
+## 2026-07-17 · v2.0.7 Luminous Blue 最终 UI 复刻
+
+按照 `docs/06-ui-polish-plan.md` 完成原生 Android 界面重构，保持同传、视频、方案和本场上下文的数据边界不变。
+
+**核心页面**：
+- 同传和视频拆分为空闲态、运行态；运行后隐藏配置内容，顶部状态固定，字幕区滚动，停止按钮固定底部
+- 首页增加场景快捷选择，运行页展示启动时冻结的语言方向和场景，避免中途设置变化污染当前会话
+- 历史页增加搜索和同传/视频筛选，并使用独立详情页展示原文、译文和时间片段
+- 方案弹层统一长期配置结构；方案库编辑改为原位更新，取消不再覆盖当前草稿，也不会重复创建方案
+
+**视觉与设置**：
+- 统一 Luminous Blue 颜色、圆角、卡片、输入框、Chip、状态圆点和页面间距
+- 设置首页、翻译服务、内容分析 AI、字幕、诊断和关于页统一分组样式；API Key 默认遮罩
+- 悬浮字幕重做为深色普通态和浅色紧凑态，普通态增加蓝色强调条，保留拖动、暂停和即时样式更新
+
+**正确性修复**：
+- 会话快照增加语言和场景元数据，运行态不再读取会话外草稿
+- 异常中断的历史记录改用最后字幕时间计算时长，避免持续增长
+- 内容分析 AI 配置在退出子页和 Activity 暂停时保存
+- 方案弹层使用确定高度和固定 Footer；原方案失效时保留编辑内容并明确提示
+- 悬浮窗添加失败时安全降级，视频模式停止当前会话而不让进程崩溃
+- 紧凑字幕保留主次两级内容，宽度限制为 280dp，并在切换后约束到屏幕范围
+
+**回归覆盖**：空闲/同传/视频整屏显隐、跨模式开始按钮禁用、会话方案冻结、计时边界、异常历史时长、方案原位编辑及失效 ID 不污染草稿。
+
+**版本**：versionCode 28 / versionName 2.0.7。
+
+---
+
+## 2026-07-16 · v2.0.6 本场上下文回到同传/视频主页
+
+**边界澄清**：
+- 方案库 / 方案编辑：只存长期方案（名称、场景、方案提示词），**不保存**临时上下文
+- 同传 / 视频主页：提供本场临时上下文；停止后清除；启动时注入提示词
+- 视频主页额外支持 YouTube 链接 + AI 解析本场视频
+
+**验证**：compile / unit test / lint / assemble 全过。
+
+---
+
+## 2026-07-16 · v2.0.5 术语库与临时上下文彻底移除
+
+**目标**：只保留「方案」心智。
+
+**变更**：
+- 设置里删除术语库入口；移除 `page_settings_scenes`
+- 方案编辑 BottomSheet 只保留：方案名称 / 场景预设 / 自定义场景 / 方案提示词
+- 去掉临时本场上下文、视频链接分析、术语库绑定 UI
+- 提示词组装只读方案字段（场景 + 方案提示词）
+- 方案库卡片不再展示术语库绑定
+- 启动链路仍兼容旧 Intent 字段，但 glossary/context 固定为空
+
+**验证**：compileDebugKotlin / testDebugUnitTest / lintDebug / assembleDebug 全过。
+
+---
+
+## 2026-07-16 · v2.0.4 修复启动闪退
+
+**现象**：安装 2.0.3 后打开 App 直接闪退。
+
+**根因**：同传/视频主页语言胶囊使用
+`TextInputLayout.OutlinedBox.Dense.ExposedDropdownMenu` + `app:boxBackgroundMode="none"`。
+Material 的 ExposedDropdownMenu 会强制 `endIconMode=dropdown`，而 dropdown end icon 不支持 `boxBackgroundMode=none`，
+inflate 时抛 `IllegalStateException: The current box background mode 0 is not supported by the end icon mode 3`，
+在 `MainActivity.setContentView` 阶段崩溃。
+
+**修复**：语言胶囊改为普通 Dense 样式 + `app:endIconMode="none"`，保留透明胶囊外观与 AutoComplete 绑定。
+
+**回归**：新增 Robolectric `MainActivityStartupTest` 覆盖启动 inflate；本地复现失败后修复通过。
+
+**版本**：versionCode 25 / versionName 2.0.4。
+
+---
+
+## 2026-07-16 · v2.0.3 第二期：方案库列表页
+
+按 `docs/06-ui-polish-plan.md` 第二期落地独立「方案库」页。
+
+**页面**
+
+- 新增 `page_plan_library.xml`：同传/视频 segmented 切换、方案卡片列表、FAB 新建
+- 新增 `item_saved_plan.xml`：图标字 + 名称 + 场景/语言/术语标签 + 应用/编辑/删除
+- 设置首页新增「方案库」入口；同传/视频方案卡增加「方案库」快捷入口
+
+**交互**
+
+- 应用：写入对应模式 draft，刷新主页摘要与语言控件
+- 编辑：先 apply 再打开现有 BottomSheet 编辑器
+- 新建：打开当前分段对应模式的 BottomSheet
+- 删除：`TranslationPlanStore.deleteSavedPlan`
+- 从主页进入方案库后返回原 Tab（同传/视频），从设置进入返回设置
+
+**版本**：versionCode 24 / versionName 2.0.3。
+
+**真实验证**：`:app:compileDebugKotlin` + `:app:testDebugUnitTest` + `:app:lintDebug` + `:app:assembleDebug` 通过。
+
+---
+
+## 2026-07-16 · v2.0.2 主页 UI 整理：方案合并呈现 + iOS 风格
+
+用户确认：场景与术语库在 UI 上合并成「方案」心智；保留功能，主页先向 `ui.zip` 的 iOS 工具感靠拢。
+
+**信息架构**
+
+- 新增 `docs/06-ui-polish-plan.md`：方案 = 场景 + 语言 + 可选术语库；本场背景仍临时
+- 主页「当前方案」摘要展示：`场景 · 语言 · 术语库（如有）`
+- 术语库仍在设置维护，日常入口是方案卡 / 弹窗
+
+**同传 / 视频主页**
+
+- 语言选择改为胶囊条（保留原下拉绑定与草稿读写）
+- 同传：大圆主按钮置中，状态改为胶囊标签，音量条收在下方
+- 视频：状态胶囊 + 全宽圆角主按钮
+- 方案卡文案改为「当前方案 / 编辑」，去掉重复的页面说明感
+
+**版本**：versionCode 23 / versionName 2.0.2。
+
+**真实验证**：`:app:testDebugUnitTest` + `:app:lintDebug` + `:app:assembleDebug` 通过。
+
+---
+
+## 2026-07-16 · v2.0.1 UI 细节打磨：网格对齐与文案清理
+
+纯界面打磨，不动功能代码、协议和数据链路，Luminous Blue 设计系统风格不变。
+
+**间距网格对齐**
+
+- 把 11 个 layout 和 `styles.xml` 里 margin/padding 的硬编码 dp 全部对齐到 4dp 网格并换成 `@dimen` token
+- 脱格值回格：`14→space_16`、`10→space_12`、`6→space_8`、`18→space_16`、`3→grid_4`
+- 卡片内边距统一 `space_16`（原来 14/16 混用）
+- 同传/视频两个主页 4 张卡片段间距统一 `space_16`（原来末张字幕卡少 4dp）
+- 底部弹窗刻意的 `20dp` 横向内缩保留，字号/圆角/控件宽高一律未动
+
+**文案清理**
+
+- 删掉四个页面标题下的引导性说明句（PageDesc）：实时同传、视频字幕、历史记录、术语库
+- 历史空状态由「还没有历史记录。翻译一场之后再回来看看。」精简为「暂无历史记录」
+- 其余功能性文案（按钮、字段、状态、参数说明、设置项副标题）审阅后保留
+
+**版本**：versionCode 22 / versionName 2.0.1。
+
+**真实验证**：改前基线 `assembleDebug` 通过；改后 `lintDebug` + `assembleDebug` 均通过，`@dimen` 引用全部解析，APK 重新生成。
+
+---
+
+## 2026-07-16 · v2.0.0 通用实时翻译与 Luminous Blue 全面重构
+
+本次不保留旧测试数据兼容层，直接将产品从 VTuber 视频字幕工具重构为通用的「同传 + 视频」实时翻译 App。
+
+**产品与界面**
+
+- 统一底部「同传 / 视频 / 历史 / 设置」四页结构，使用 Luminous Blue 蓝白设计系统
+- 同传和视频各自拥有独立语言、场景、术语库、高级要求和本场上下文
+- 配置集中到 `TranslationPlanBottomSheet`；AI 内容分析只在对应业务页出现
+- 设置页只维护 AI 服务、字幕、长期翻译参数、诊断、关于和通用术语库
+
+**数据与运行链路**
+
+- 新增 `TranslationPlan` / `TranslationPlanStore`，草稿、命名方案及模式校验完整隔离
+- 新增通用 `GlossaryProfile`，替代旧 `StreamerProfile`
+- 启动时创建不可变会话快照，权限回调、重连和后台服务不再读取变化中的 UI 设置
+- `StatusBus` 提供结构化字幕快照；历史升级为包含模式、语言、时长、原文和译文的会话 JSON
+- 悬浮字幕支持普通/紧凑态和真实暂停；本场上下文随 Activity 重建保存，并在会话启动快照成功交给服务后立即消费
+- 历史只自动写入 App 私有结构化存储，不在公共 Downloads 留下会议或同传副本
+
+**清理**
+
+- 删除旧 prompt 预设、`composedPrompt` 回退、旧场景同步、旧迁移代码
+- 删除 `StreamerProfile`、`StreamerProfileStore`、`ProfileGenerator` 和隐藏旧表单
+- 将 `YouTubeVideoInfo` 拆成独立有效模型，视频 URL 仅用于抓取，不注入翻译提示词
+
+**追加代码审查修复**
+
+- Android 11–13 麦克风前台服务显式启用 `FOREGROUND_SERVICE_TYPE_MICROPHONE`；视频模式继续使用 `MEDIA_PROJECTION`
+- Android 13+ 通知权限改为可选，拒绝通知不再阻止录音启动
+- 同传/视频本场资料跨 Activity 重建保存，并在启动 Intent 成功发出后立即消费，避免旧上下文串入下一场
+- 暂停状态与真实连接状态分离；原文片段即时进入结构化会话快照
+- 取消自动写入公共 Downloads 的 Markdown 副本，历史删除语义只对应一份 App 私有数据
+- 方案库和术语库逐项容错；外层或单条数据损坏时，在修复写入前保存原始 JSON 备份
+- AI 生成术语先保留为内存候选，只有点击“应用”才持久化；View 销毁后旧请求自动失效
+- 连续两句译文相同但原文不同的情况不再被误判为重复；同传边界会过滤残留视频元数据
+
+**版本**：versionCode 21 / versionName 2.0.0。
+
+**真实验证**：
+
+- `:app:testDebugUnitTest`：12 项测试通过
+- `:app:lintDebug`：通过
+- `:app:assembleDebug`：通过
+- APK ZIP 完整性：通过
+- APK v2 签名：通过，固定 debug 证书
+- 包信息：`com.xyq.livetranslate`，minSdk 29，targetSdk 35
+- 最终复验：12 项单测、0 failures；GitHub Actions `Android Debug Build #29482790597` 通过并上传 `LiveTranslate-debug-apk`
+- 最终 Debug APK SHA-256：`d6373f9fe17f7cb211dd75c0d302123b2de0c6213d0ca36ab85504cbbe12de0a`
+
+---
+
+## 2026-07-15 · 同传 / 视频四层提示词拆分
+
+**问题**：同传和视频虽然输入场景不同，却共用同一个 `composedPrompt`；默认资料还会让通用同传带上 VTuber 偏置。
+
+**实现**：
+
+- `PromptBuilder` 改为四层组合：隐藏基础规则 → 自动模式规则 → 模式独立场景预设 → 仅本场上下文 / 专名资料
+- 同传预设：通用、会议、课堂、采访、旅行交流、自定义
+- 视频预设：通用视频、直播、VTuber、动漫、游戏、新闻、课程、自定义
+- 两个 Tab 各自提供预设、本模式自定义要求和本场上下文；预设与自定义要求分模式保存，本场上下文不单独持久化，并在该模式停止后自动清空
+- 设置 → 场景 / 术语库新增同传和视频场景入口，与两个首页使用同一状态并双向即时同步；本场上下文仍只保留在对应首页
+- 同传和视频首页顶部新增显眼的“源语言 → 目标语言”选择，和设置页双向同步；默认日语 → 中文，运行期间锁定避免界面与当前连接不一致
+- 源语言方向写入系统提示词，目标语言同时写入提示词和 Gemini Live `targetLanguageCode`；字幕标签与 AI 资料生成也跟随当前语言方向
+- 通用模式不再默认注入 `通用VTuber` 资料；只有 VTuber 场景或明确选中的自建资料才加入专名块
+- `prepareSessionSettings(captureMode)` 只校验即将启动的模式；本场提示词延后到麦克风服务真正启动或投屏授权成功时才写入，`CaptureService` 停止时删除 `composedPrompt`
+- 权限请求中的待启动模式写入 `savedInstanceState`，Activity 重建后不会把同传串成视频
+- 设置页预览改为“本场资料预览”，不再显示隐藏的基础 / 模式提示词；YouTube AI 分析结果只回填视频上下文，注入模型时不携带视频 URL
+- 自建资料即使只填写“资料名”，该名称也会进入专名资料块
+
+**验证**：
+
+- `:app:testDebugUnitTest`：6 组单元测试通过，覆盖预设隔离、同传无视频偏置、VTuber 视频资料、仅资料名、语言方向和隐藏预览
+- `:app:lintDebug`：通过；剩余为项目既有硬编码文案、依赖版本和大布局警告
+- `:app:assembleDebug`：本地 Android 35 SDK 实际构建成功
+
+---
+
+## 2026-07-13 · v1.9.1 修复：切换底部 Tab 闪退
+
+**现象**：App 默认打开「同传」正常，点击「视频 / 历史 / 设置」立即闪退。
+
+**根本原因**：`BottomNavigationView.setOnItemSelectedListener` 回调调用 `showPage(itemId)`；`showPage()` 又在 `selectedItemId` 尚未由 Material 更新时写回同一个 itemId，导致选中回调无限重入，最终 `StackOverflowError`。
+
+**修复**：`showPage()` 只负责页面显示，不再修改 `bottomNav.selectedItemId`。程序化切换只在回调外的明确入口进行。版本升到 `1.9.1`（versionCode 20）。
+
+**回归检查**：静态探针确认 `showPage()` 函数体内没有 `selectedItemId =`；完整构建走 GitHub Actions。
+
+---
+
+## 2026-07-13 · v1.9 通用实时翻译：底部 4 Tab + 麦克风同传
+
+目标：从「VTuber 专用视频字幕」扩成「同传 + 视频」双入口，共用同一翻译引擎。
+
+### A. 导航壳
+
+- 去掉侧边栏 `DrawerLayout` + `NavigationView`
+- 底部 4 Tab：
+  1. **同传**：麦克风实时同传
+  2. **视频**：系统内录 + 悬浮字幕（原实时翻译）
+  3. **历史**
+  4. **设置**
+- 原「主播资料」→ 设置内 **场景 / 术语库** 二级页（复用 `pageStreamer`）
+- 设置二级页打开时隐藏底部导航，工具栏返回箭头
+
+### B. 麦克风同传后端
+
+- `CaptureService` 支持 `EXTRA_MODE=mic|video`
+  - video：MediaProjection 内录（原逻辑）
+  - mic：`AudioRecord`（优先 `VOICE_RECOGNITION` → `VOICE_COMMUNICATION` → `MIC`），16k/48k mono 优先
+- 共用：`PcmProcessor` → `GeminiLiveClient` → `SubtitleStabilizer` → transcript 落盘
+- 悬浮窗：视频模式强制；同传模式有悬浮窗权限才挂，否则只在 App 内看字幕
+- 前台服务类型：`mediaProjection|microphone`；Manifest 增加 `FOREGROUND_SERVICE_MICROPHONE`
+- `StatusBus.captureMode` 标记当前模式；两模式互斥（先停再开）
+- 同传页：音量条、中/原文字幕、开停按钮、场景标签
+
+### 涉及文件
+
+- `CaptureService.kt` / `StatusBus.kt` / `MainActivity.kt` / `AndroidManifest.xml`
+- `activity_main.xml` / `menu/bottom_nav.xml` + tab 图标
+- 去掉 `drawerlayout` 依赖；版本 `1.8` → `1.9`（versionCode 19）
+
+### 未做（刻意）
+
+- 视觉重设计（暗色霓虹等）
+- 文案全面去 VTuber 化
+- 同传专用 TTS 播报 / 双向对话
+- 历史列表标注来源模式
+
+### 验证
+
+- 本地无完整 Android SDK；Kotlin 括号平衡 / XML 解析 / `R.id` 引用自检通过
+- 完整 `assembleDebug` 待确认后走 GitHub Actions
+- 真机待测：同传开停、音量电平、日→中字幕、与视频模式互斥
+
+---
+
+## 2026-07-12 · 修复：CI 构建每次签名不同、无法覆盖安装
+
+用户反馈：不同次构建出来的安装包签名好像都不一样。
+
+**根因**：`app/build.gradle.kts` 没配 `signingConfig`，`assembleDebug` 走默认 debug 签名，用的是 `~/.android/debug.keystore`——该文件每台机器首次构建时随机生成。GitHub Actions runner 用完即弃，每次都是全新机器 → 每次现生成不同的 debug.keystore → 每个 APK 签名证书都不同 → 新包无法覆盖旧包（签名不一致），只能卸载重装、丢失设置。
+
+**修复**：仓库内放固定 `app/debug.keystore`（标准公开口令 `android` / `androiddebugkey`，非机密），`signingConfigs.getByName("debug")` 指向它。此后所有机器、所有 CI 构建签名一致，可直接覆盖安装保留数据。一次性代价：换固定签名后首次安装仍与手机上现有随机签名旧版不匹配，需再卸载重装一次，之后永久稳定。
+
+---
+
+## 2026-07-12 · 修复：连接轮换后偶发不识别、字幕卡死
+
+用户实测反馈：断线轮换之后有时不再识别，字幕就卡在那里，后台一直卡着。
+
+**根因（`GeminiLiveClient`）**：轮换有两条触发路径——定时 `rotateTask`（scheduler 线程）和 `goAway` 即时轮换（WebSocket 读线程）。两者会**跨线程同时进 `connect()`**，而 `generation++` 是 `@Volatile Int` 的非原子读-改-写，`ws` 赋值也没串行化。竞态下会建出两条连接、两个 WsListener 的 `gen` 都等于当前 `generation`，`ws` 只指向其一；另一条拿不到音频被服务端闲置关闭，其 `onClosed` 又因 `gen==generation` 触发重连，级联下去 `ws` 很容易指向一条永远走不到 `setupComplete` 的连接。`ready` 永久卡 false → `senderLoop` 把音频块无限退回队列 → 服务端收不到输入 → 没有转写 → 字幕永久冻结。且原本**没有握手看门狗**，一旦卡死无法自愈。
+
+**修复**：
+
+- 连接生命周期操作（connect / rotate / scheduleReconnect / 看门狗）全部**串行到 scheduler 单线程**；WebSocket 读线程的 `goAway` / `setupComplete` 只用 `runOnScheduler` 投递任务，不再直接改 `generation` / `ws` / `rotateTask`
+- `generation` 改 `AtomicInteger`；`rotate(fromGen)` 加代际守卫，定时任务与 goAway 谁先跑谁生效，后到的看到代际推进就跳过，杜绝重复轮换
+- `connect()` 开头始终取消残留 `rotateTask`，避免过期轮换任务乱触发
+- 新增**握手看门狗** `HANDSHAKE_TIMEOUT_MS`（12s）：连上后到点仍没 `setupComplete` 就作废旧连接并强制重连，管线不再可能永久冻结
+
+**验证**：改动集中在 `GeminiLiveClient.kt` 单文件（本地无 Android SDK / AGP 缓存，完整构建走 GitHub Actions assembleDebug）。
+
+---
+
+## 2026-07-10 · v1.8 提示词优化：注入提示词瘦身 + 资料 AI 输出对齐用途
+
+用户反馈：预览提示词里居然带着 YouTube 链接——翻译模型根本用不上。
+
+**1. `PromptBuilder` 重写（注入给 Gemini Live 的 systemInstruction）**
+
+- **去掉 URL**：本场直播只保留标题 + 频道
+- 去掉 App 内部概念表头（"固定提示词（主播资料）""临时提示词（仅本次会话使用…）"）——模型不需要知道我们的数据分层，改为直白分节：主播 / 本场直播 / 术语固定译法 / 常见错听修正 / 中文风格
+- 去掉模型做不到的要求（"保持低延迟"）和重复句；开头一句话说清任务
+- 删除未使用的 `buildFixedProfileBlock` / `buildTemporaryContextBlock`
+
+**2. `ProfileGenerator` system prompt 对齐用途**
+
+- 开头声明 JSON 的用途：注入实时翻译模型当背景知识，所有字段往"帮它听对、译对专名"方向写
+- `temporaryContext` 从"200–400 字内容猜测"改为"100–250 字给翻译模型的临时提示"：点出主题/环节 + 可能反复出现的专名及译法（游戏名、歌名、连动成员），明确禁止复述链接和"本场应该很有趣"式废话
+- `terms` 引导优先直播高频词、5–15 条为宜
+
+**版本**：versionCode 18 / versionName 1.8。
+
+**验证**：GitHub Actions assembleDebug。
+
+---
+
+## 2026-07-10 · v1.7 设置界面重构：分类二级菜单
+
+用户需求：设置不要全堆一页，改成分类二级菜单，方便以后加新设置（如兼容 OpenAI 的 live 模型）；诊断、关于并入设置。
+
+**结构变化**
+
+- 侧边栏从 5 项减为 4 项：实时翻译 / 主播资料 / 历史记录 / 设置（诊断挪进设置）
+- 设置首页变成分类入口列表（单卡片 + 分隔线 + 右箭头），点击进二级页；工具栏自动切换返回箭头，物理返回键同样先退回设置首页
+- 五个二级页：
+  - **翻译服务**：翻译 API（Key / Base URL）+ 翻译参数（目标语言 / 同语言回显 / 轮换间隔，独立恢复默认）——以后接其他翻译模型（OpenAI Realtime 等）就在这页加"服务商"选择
+  - **字幕与悬浮窗**：悬浮窗样式三滑条 + 断句节奏两滑条（独立恢复默认，会连样式一起重置）
+  - **资料 AI**：原资料 AI 卡片原样搬入
+  - **诊断**：电池白名单 + 运行状态原文
+  - **关于**：App 定位说明、版本号（运行时从 PackageInfo 读）、翻译模型名、GitHub 入口
+- v1.6 的"高级设置"折叠卡片取消——分类之后每项都有了自然归属，不再需要"藏起来"
+
+**实现**
+
+- 布局仍是单 Activity + 页面可见性切换，无 Fragment；新增 SettingsRow* 公共样式，新分类行复制三行 XML 即可
+- 新增 `ic_arrow_back_24` 返回图标；`SettingsStore` 悬浮窗样式默认值提为常量；删除一次性的 resetAdvanced
+- 填 Key 的引导现在直接跳到"设置 → 翻译服务"二级页
+
+**版本**：versionCode 17 / versionName 1.7。
+
+**验证**：GitHub Actions assembleDebug。
+
+---
+
+## 2026-07-10 · v1.6 高级设置（云端参数摸底 + 本地断句可调）
+
+用户需求：把 `gemini-3.5-live-translate-preview` 能设置的选项查清楚，做成设置页里默认隐藏、点开可见的高级设置。
+
+**1. 云端参数摸底（官方文档核对，结论记入 tech-notes）**
+
+- 这个模型的云端配置是刻意做减法的：`translationConfig` 只有 `targetLanguageCode` / `echoTargetLanguage` 两个字段 + 两个转写开关，没有 VAD/voice/temperature
+- 官方声称翻译模式不支持 systemInstruction，但实测可用——记为"依赖未文档化行为"风险
+- 中文官方语言代码是 `zh-Hans` / `zh-Hant`，我们用的 `zh` 实测可用，保持默认
+
+**2. 高级设置卡片（设置页，默认收起，点标题展开）**
+
+- **目标语言**：可编辑下拉（zh / zh-Hans / zh-Hant / en / ja / ko + 自由输入），默认 zh
+- **同语言回显**（echoTargetLanguage）开关，默认开（维持旧行为）
+- **连接主动轮换间隔**：120–580 秒滑条，默认 505（服务端约 590s GoAway）
+- **断句·静默转正**：1–6 秒滑条（步进 0.25s），默认 2.5s
+- **断句·当前行最长**：20–80 字滑条，默认 42
+- "恢复默认"按钮；所有改动下次开始翻译时生效
+
+**3. 实现方式**
+
+- `SettingsStore` 新增 adv* 字段（带范围钳制 + resetAdvanced）
+- `GeminiLiveClient` 的 targetLang / echoTargetLanguage / rotateAfterMs 从硬编码常量改为构造参数
+- `SubtitleStabilizer` 的 idleCommitMs / maxCurrentChars 同样参数化；`CaptureService` 开播时从设置读取传入
+- 老用户无感：所有默认值 = 原硬编码值，不填就是原行为
+
+**版本**：versionCode 16 / versionName 1.6。
+
+**验证**：GitHub Actions assembleDebug（本次开发环境无法直连 dl.google.com，无本地 SDK）。
+
+---
+
+## 2026-07-10 · v1.5 资料 AI + UI 精简（编译通过）
+
+用户需求：把主播资料和提示词改成傻瓜式自动化——贴 YouTube 链接 → AI 自动生成资料和临时提示词。
+
+**1. 第二 AI 接口 (`AiTextClient`)**
+
+- 独立于翻译 WebSocket 的文本 AI 通道，走 REST `generateContent` / OpenAI `chat/completions`
+- 支持两种 API 格式，设置页可一键切换（Gemini 原生 / OpenAI 兼容）
+- Gemini 格式自动开启 `google_search` grounding（模型实时搜索 web 获取 VTuber 最新信息）
+- 输出强制 JSON Mode，带 markdown code fence 剥离和容错解析
+- Key、URL、模型名均独立配置，可与翻译 API 共用或分开
+
+**2. AI 资料生成器 (`ProfileGenerator`)**
+
+- system prompt 详细描述 `StreamerProfile` 各字段含义，要求模型基于 VTuber 圈子知识 + Google Search 联网搜索
+- 一次 API 调用产出：主播资料 JSON + 本场临时提示词文本 + 备注
+- 不认识的主播会诚实标注，不编造
+
+**3. 设置页新增"资料 AI"卡片**
+
+- AI Key / Base URL / 模型名 + Gemini/OpenAI 格式切换按钮
+- 默认模型 `gemini-3-flash-001`（够用且快）
+
+**4. 主播资料页 UI 重构**
+
+- "获取视频信息" + "AI 自动分析生成" 改为并排 TextButton，更紧凑
+- AI 完成自动回填主播资料表单 + 临时上下文 + 触发预览
+- 提示词预览卡片改为标题行+小刷新按钮，默认空白
+
+**5. 全界面文案精简**
+
+- 删除各页 PageDesc 长说明、FieldLabel 小提示、hint 括号注释、helperText 冗文、诊断页流程说明
+- 卡片标题缩短；表单 hint 只留字段名
+- 整体从"自言自语说明"调整为"大厂成品"风格
+
+**版本**：versionCode 15 / versionName 1.5。
+
+**新增文件**：`AiTextClient.kt`（~230 行）、`ProfileGenerator.kt`（~90 行）。
+
+**验证**：`./gradlew assembleDebug` → BUILD SUCCESSFUL。
+
+---
+
+## 2026-07-09 · v1.4 状态栏修复 + 提示词分层 + 历史页 + 前端文案重做（编译通过）
+
+按用户三点反馈一次做完，核心翻译链路不动。
+
+**1. 状态栏遮挡**
+
+- targetSdk 35 默认 edge-to-edge，顶部内容会压到状态栏。用 `ViewCompat.setOnApplyWindowInsetsListener` 给 toolbar 顶部、页面容器底部、侧边栏上下分别让出 system bars 高度。toolbar 改 `wrap_content + minHeight`，状态栏区域用品牌色填充。
+
+**2. 提示词拆成固定 / 临时两层**
+
+- `PromptBuilder` 重构：`build(profile, session: SessionPromptContext)`，输出「固定提示词（主播资料）+ 临时提示词（仅本次会话）+ 中文风格」。
+- 新增 `SessionPromptContext`（YouTube 信息 + 手动补充），**不保存**，只组装进当前会话。
+- `StreamerProfile` 增加 `category` 字段（可选，带常用分类下拉）。
+- 开播时 `MainActivity` 组装 `固定资料 + 临时上下文` → `SettingsStore.saveComposedPrompt`；`CaptureService` 读 `composedPrompt`（为空退回旧预设，保证兜底）。
+- 主播资料页去掉旧“提示词预设”编辑器；改为固定资料卡 + 临时提示词卡 + 完整提示词预览。
+- 备注：临时提示词后续计划接小模型自动总结，先留手动入口。
+
+**3. 历史记录页**
+
+- 新增 `HistoryStore`：transcript 同时写一份到 App 内部 `files/history/`（`TranscriptLogger` 双写），历史页稳定读取，不受公共目录权限影响。
+- 历史页：列表（时间/大小）→ 点开查看全文 → 复制全文；公共 `下载/LiveTranslate/` 仍保留供文件管理器分享。
+
+**4. 前端文案与风格**
+
+- 每页顶部加一句“这页是干嘛的”说明；输入框提示词重写得更口语、更准确。
+- 新增 `styles.xml` 统一 PageTitle / PageDesc / CardTitle / FieldLabel / Field，全 App 风格一致。
+
+**版本**：versionCode 14 / versionName 1.4。APK：`LiveTranslate-v1.4.apk`。
+
+**验证**：`../tools/gradle-8.9/bin/gradle assembleDebug` → BUILD SUCCESSFUL。
+
+---
+
+## 2026-07-09 · v1.3 App 壳子 + P1 后端第一版（编译通过）
+
+响应用户反馈：一页平铺太简陋，先做正常 App 风格；同时 P1 优先“后端逻辑固定”，前端只做够用入口。
+
+**P0 收尾：App 壳子**
+
+- 主界面改为 `DrawerLayout + NavigationView + MaterialToolbar`：左侧侧边栏包含“实时翻译 / 主播资料 / 设置 / 诊断”
+- 实时翻译页只保留运行控制台和当前会话，不再堆设置项
+- 设置页承载 API key、Base URL、prompt 预设、悬浮窗样式
+- 诊断页承载电池白名单和原始状态文本
+
+**P1 后端第一版**
+
+- 新增 `StreamerProfile` / `StreamerProfileStore`：本地主播资料库，SharedPreferences JSON 保存；字段包含日文名、中文名、所属、别名/口癖、术语、错听、中文风格
+- 新增 `PromptBuilder`：根据主播资料 + YouTube 信息 + 本场补充上下文生成 Gemini Live systemInstruction 文本
+- 新增 `YouTubeOEmbedClient`：解析 `youtu.be` / `youtube.com/watch` / `/live/` / `/shorts/` URL，并通过 YouTube oEmbed 获取标题和频道
+- 主播资料页可新建/保存资料、获取 YouTube 标题频道、生成 prompt、应用到现有提示词预设
+
+**版本**：versionCode 13 / versionName 1.3。APK：`LiveTranslate-v1.3.apk`。
+
+**验证**：`../tools/gradle-8.9/bin/gradle assembleDebug` → BUILD SUCCESSFUL（12s）。
+
+---
+
+## 2026-07-09 · v1.2 P0 页面整体打磨第一版（编译通过）
+
+按 Felo Translator 对标方向先做 P0 的“页面整体搞好”，不改核心翻译链路。
+
+**新增/调整**：
+
+- 主页面从“设置页优先”改成“运行控制台优先”：顶部直接显示运行状态、连接状态、已发送块数和当前 key 标签
+- 新增输入音量电平条：`CaptureService` 在内录线程计算 PCM RMS，写入 `StatusBus.audioLevelPct`，主界面 300ms 刷新显示；用于快速判断是否捕到系统音频
+- 新增“当前会话”卡片：展示稳定后的中文字幕、最近日文听写、transcript 保存路径
+- 中文字幕面板保留最近 4 条确认行，并显示当前临时行；悬浮窗仍保持原来的确认行/当前行两级字幕
+- Key、Base URL、prompt 预设、悬浮窗样式等设置保留，但下移到运行控制台之后
+- 停止服务时音量电平归零；`onResume` 避免重复挂多个刷新循环
+
+**版本**：versionCode 12 / versionName 1.2。
+
+**验证**：`../tools/gradle-8.9/bin/gradle assembleDebug` → BUILD SUCCESSFUL（27s）。
+
+---
+
+## 2026-07-09 · v1.1 真机实测基本通过 + Felo Translator 对标启动
+
+**用户实测结论**：v1.1 基本运行功能正常。后台/8 分钟/荣耀杀后台不再作为主要风险反复追踪；用户判断只要悬浮窗存在，后台存活基本可靠。多 key 轮换功能已实现，不再单独作为待办追验。
+
+**待处理方向变化**：从“继续验证基础链路”转为“对标成熟产品体验”。根目录 `base.apk` 确认为第三方 App **Felo Translator**（包名 `com.honso.ai.felotranslator`，版本 `V1.6.12(build 69)`），后续以其作为产品形态标杆，重点参考会话历史、语言选择、运行态反馈、transcript 浏览/复制/分享、自动播放等体验。
+
+**静态分析摘要**：
+
+- Felo 是通用同传/语音翻译产品，不是 VTuber/YouTube 内录专用产品
+- 使用 Microsoft Speech / Translator 相关服务、ML Kit 离线翻译包、Firebase、Stripe/Google Billing 等商业化组件
+- 有首页实时转写列表、底部波形、语言选择、历史记录、云同步、离线翻译包管理、VIP 时长限制等完整产品层
+- 详情见 [05-felo-benchmark.md](05-felo-benchmark.md)
+
+---
+
+## 2026-07-08 · v1.1 UI 打磨（用户要求，编译通过）
+
+- **App 图标**：自适应图标（纯矢量）——靛蓝渐变底 + 白色字幕条 ×2 + 绿色状态点（呼应悬浮窗设计语言），含 Android 13 单色主题图标
+- **通知栏小图标**：同款字幕条图形（白色剪影），替换之前借用的系统图标
+- **主界面**：Material 3 重做——卡片分区（连接 / 提示词预设 / 悬浮窗样式 / 状态）、浮动标签输入框（TextInputLayout）、预设改用 ExposedDropdownMenu、SeekBar 换 Material Slider、按钮分级（主按钮实心 / 白名单 tonal / 预设操作文字按钮）、品牌色 #4F46E5（深色模式 #818CF8），自动适配深浅色
+- **悬浮窗**：确认行（小一号、75% 白）与当前行（原字号、白 + 阴影）视觉分层；圆角加大到 14dp + 1dp 淡描边
+- git 提交 930bd07；APK：LiveTranslate-v1.1.apk（旧 v1.0 拷贝已移除）
+
+---
+
+## 2026-07-08 深夜 · v1.0 完整版完成（用户睡前授权自主开发，待验收）
+
+用户指示：不再分步实测，一步到位做完整成品。阶段 1 剩余项全部实现，编译一次通过。
+
+**v1.0 新增（相对 v0.3）**：
+
+- **key 安全**：新增 `KeystoreCrypto`（Android Keystore AES/GCM），API key 加密落盘；旧版明文 key 首次运行自动迁移成加密存储
+- **多 key 轮换**：key 输入框支持英文逗号分隔多个；每次建立连接随机选一个（含 8 分半轮换时，等于每段直播换 key 分摊配额）；状态区显示当前用的 key#序号
+- **prompt 预设**：按主播存多套提示词（Spinner 选择 + 新建/保存/删除），旧版单条 prompt 自动迁移为"通用VTuber"预设
+- **悬浮窗控制**：字号（12–26sp）/ 背景不透明度（20–95%）/ 最多行数（1–3）三个滑条，改完立即生效（styleVersion 机制，无需重启会话）；**点一下悬浮窗收起成小圆点，再点展开**；窗宽改用屏幕短边计算，横竖屏都不越界
+- **transcript 挪到公共下载目录**：`下载(Download)/LiveTranslate/日期_时间.md`，文件管理器直接可见（MediaStore 写入，失败退回私有目录）
+- **防杀后台**：PARTIAL WakeLock（4 小时上限兜底）+ "加入电池白名单"按钮（ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS，不支持的 ROM 退到电池优化列表页）
+- 内录初始化失败等错误现在会显示在状态区（error:内录初始化失败）
+
+**版本**：versionCode 10 / versionName 1.0。覆盖安装即可，旧设置自动迁移。
+
+**待用户验收/确认**（v1.1 实测后收口）：
+
+- [ ] 覆盖安装后旧 key 还在（迁移验证；如用户已重新填 key，可不再追）
+- [x] 基本运行功能正常（2026-07-09 用户反馈）
+- [x] 后台/8 分半/荣耀杀后台不再作为主要风险追踪：只要悬浮窗存在，后台存活基本可靠
+- [x] 多 key 轮换功能已实现，不再单独作为待办追验
+- [ ] transcript 出现在 下载/LiveTranslate/（下次顺手确认即可）
+
+---
+
+## 2026-07-08 · v0.2 真机实测通过 ✅ + v0.3 字幕稳定器完成
+
+**v0.2 实测结果**（用户，约 2 分钟短测）：
+
+- 全链路通：悬浮窗出字、YouTube 原声正常、transcript 正确落盘
+- transcript 质量好于预期：ja/zh 对齐整齐，专名（FF14、7-11 无水咖喱、メカブ）接得住
+- 无播放时字幕静止 —— 符合预期（静音不发数据）
+- 短测未覆盖：8 分半主动轮换、荣耀后台长时间存活 → 留给下次长测
+
+**v0.3 新增 `SubtitleStabilizer`**（一次编译通过）：
+
+- 碎片边界重叠合并（≥2 字重叠才算，防止误合）
+- 句末标点（。！？…～!?）切句；与上一句相同或被包含的句子丢弃（治复读）
+- 2.5s 无新碎片或当前行超 42 字 → 强制转正
+- 悬浮窗改为两级显示：上一句确认行 + 正在生成的当前行；主界面 zh 状态同步稳定后的文本（▏分隔两级）
+- transcript 落盘仍是原始碎片流（方便对照排查），稳定器只影响显示
+
+**遗留**：
+
+- [ ] v0.3 长测（>10 分钟）：字幕连贯性、8 分半轮换的感知、荣耀后台存活
+- [ ] 换新 API key（如果还没换）
+
+---
+
+## 2026-07-08 · v0.2 完整版编译通过（待真机实测）
+
+**决策**：用户确认跳过 Step 1–3 独立 demo，直接做整合版。
+
+**实现内容**（9 个源文件，一次编译通过）：
+
+- `CaptureService`：前台服务（mediaProjection 类型），MediaProjection + AudioPlaybackCapture 内录（48k/44.1k 立体声/单声道自动降级尝试），投影被撤销时自动停止
+- `PcmProcessor`：混单声道 → 线性插值重采样 16kHz（跨缓冲区相位连续）→ 100ms/3200 字节分块
+- `GeminiLiveClient`：OkHttp WebSocket；setup 按 tech-notes 结构；505s 主动轮换 + goAway 即时轮换 + 异常断线指数退避重连（1s→15s 封顶）；断线期间音频进有界队列（20s 上限）恢复后追发；异常断线额外重发最近 1s
+- `SubtitleOverlay`：可拖动悬浮窗，尾部 120 字滚动显示，状态圆点（绿/黄/红）
+- `TranscriptLogger`：ja/zh 按会话落盘 Markdown（`Android/data/com.xyq.livetranslate/files/transcripts/`）
+- `MainActivity`：API key / Base URL / prompt 设置 + 权限引导链（运行时权限 → 悬浮窗 → MediaProjection）+ 每秒刷新的状态区（连接状态、已发送块数、ja/zh 尾巴）
+- `SettingsStore` 明文 SharedPreferences（加密留到阶段 1）；`StatusBus` 服务→界面状态单例
+
+**已知取舍（v0.2 故意不做）**：字幕稳定器（碎片/重复会直接显示）、翻译语音丢弃不播放、转 landscape 悬浮窗宽度不自适应、key 明文存储。
+
+**遗留**：
+
+- [ ] 真机实测（用户）：连接可达性（代理）、字幕出字、8 分半轮换的感知、长时间运行稳定性
+- [ ] 换新 API key（旧 key 泄露在聊天记录中）
+
+---
+
+## 2026-07-08 · Step 0.5 构建链路验证 ✅（编译成功，待手机安装确认）
+
+**做了什么**：
+
+- 建立项目文件夹 `D:\vtuber-live-translate\`，文档体系成型（README + docs 00–04）
+- 分析两个灵感项目（gemini-live-translate Windows 版 / Gemive Chrome 插件），可抄的点记入 02-tech-notes
+- 内录能力确认：腾讯会议共享屏幕可带系统声音（第三方 App 走 AudioPlaybackCapture 的直接证据）→ 内录路线可行
+- 环境探测：SDK android-35 就位、系统 JDK 17、无 gradle → 项目自带 Gradle 8.9 于 `tools/`
+- **技术基线变更**：放弃 Jetpack Compose，全部用传统 View（UI 简单、悬浮窗必须用 View、少一层版本矩阵）
+- 骨架项目 `android/` 建立：Gradle 8.9 + AGP 8.7.3 + Kotlin 2.0.21，compileSdk 35 / minSdk 29，包名 `com.xyq.livetranslate`
+- 首次命令行编译 **BUILD SUCCESSFUL**（4m23s，含依赖下载），生成 gradle wrapper
+- APK 产物：`android/app/build/outputs/apk/debug/app-debug.apk`（11.6 MB）
+
+**遗留**：
+
+- [ ] 用户把骨架 APK 装到手机，打开看到"构建链路验证 OK"→ Step 0.5 完全通过
+- [ ] 换新 API key（Step 3 前）
+
+**下一步**：Step 1 内录 demo（电平条 + 10 秒 WAV 样本导出）
+
+---
+
+## 2026-07-07 · 前期调研与协议实测（详见 00-original-plan.md）
+
+- Gemini Live Translate WebSocket 20 分钟真实节奏推流实验完成：日文听写约 8/10，中文实时约 6/10，结论"直播看大意可用，发布级不可用"
+- 实测确认：setup 字段位置的坑、单连接约 590 秒被 GoAway 断开、systemInstruction 可注入且对专名有效
+- 细节全部在原计划文档第 4–6 节，此处不重复

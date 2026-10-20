@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+            <ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+                android:id="@+id/pageSettingsDiagnostics"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:fillViewport="true"
+                android:visibility="gone">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:paddingHorizontal="@dimen/page_margin"
+                    android:paddingTop="@dimen/space_24"
+                    android:paddingBottom="@dimen/page_bottom_padding">
+
+                    <Button
+                        android:id="@+id/btnBattery"
+                        style="@style/Widget.Material3.Button.TonalButton"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:text="@string/btn_battery_whitelist" />
+
+                    <com.google.android.material.card.MaterialCardView
+                        style="@style/LuminousOutlinedCard"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_12"
+                        app:cardCornerRadius="@dimen/card_radius">
+
+                        <TextView
+                            android:id="@+id/tvStatus"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:fontFamily="monospace"
+                            android:padding="@dimen/space_16"
+                            android:text="@string/diagnostics_status_not_running"
+                            android:textSize="12sp" />
+                    </com.google.android.material.card.MaterialCardView>
+                </LinearLayout>
+            </ScrollView>

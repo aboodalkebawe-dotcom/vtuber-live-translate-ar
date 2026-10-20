@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/rootLayout"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/app_background"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        style="@style/LuminousToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:minHeight="@dimen/touch_target"
+        app:logo="@drawable/ic_brand_translate_24"
+        app:logoDescription="@string/app_name"
+        app:title="@string/app_name" />
+
+    <FrameLayout
+        android:id="@+id/pageContainer"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <include layout="@layout/page_interpretation" />
+        <include layout="@layout/page_video" />
+        <include layout="@layout/page_history" />
+        <include layout="@layout/page_settings" />
+
+        <!-- 历史详情与设置子页共用同一套返回栈表现。 -->
+        <include layout="@layout/page_history_detail" />
+
+        <!-- 设置二级页继续独立承载，进入时隐藏底栏并显示返回箭头。 -->
+        <include layout="@layout/page_scene_library" />
+        <include layout="@layout/page_settings_translate" />
+        <include layout="@layout/page_settings_subtitle" />
+        <include layout="@layout/page_settings_ai" />
+        <include layout="@layout/page_settings_diagnostics" />
+        <include layout="@layout/page_settings_about" />
+    </FrameLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottomNav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginHorizontal="@dimen/page_margin"
+        android:layout_marginTop="@dimen/space_8"
+        android:layout_marginBottom="@dimen/space_16"
+        android:background="@drawable/bg_bottom_navigation"
+        android:elevation="8dp"
+        android:minHeight="64dp"
+        app:itemIconTint="@color/selector_bottom_nav"
+        app:itemRippleColor="@color/primary_fixed"
+        app:itemTextColor="@color/selector_bottom_nav"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav" />
+</LinearLayout>

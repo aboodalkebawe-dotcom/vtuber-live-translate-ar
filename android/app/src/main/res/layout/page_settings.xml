@@ -1,0 +1,206 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/pageSettings"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:visibility="gone">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/page_margin"
+        android:paddingTop="@dimen/space_16"
+        android:paddingBottom="@dimen/page_bottom_padding">
+        <TextView style="@style/PageTitle" android:text="@string/settings_title"/>
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:text="@string/settings_subtitle"
+            android:textColor="@color/text_secondary"
+            android:textSize="14sp"/>
+        <TextView
+            android:layout_marginTop="24dp"
+            android:text="@string/settings_section_general"
+            style="@style/LuminousSectionLabel"/>
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            style="@style/LuminousCard">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <LinearLayout android:id="@+id/rowSetTranslate" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_key_24"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_row_translate_title"/>
+                        <TextView style="@style/SettingsRowDesc" android:text="@string/settings_row_translate_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+                <com.google.android.material.divider.MaterialDivider
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="68dp"/>
+                <LinearLayout android:id="@+id/rowSetSubtitle" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_stat_subtitle"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_row_subtitle_title"/>
+                        <TextView style="@style/SettingsRowDesc" android:text="@string/settings_row_subtitle_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <TextView
+            android:layout_marginTop="24dp"
+            android:text="@string/settings_section_scenes_ai"
+            style="@style/LuminousSectionLabel"/>
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            style="@style/LuminousCard">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <LinearLayout android:id="@+id/rowSetSceneLibrary" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_layers_24"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_row_scenes_title"/>
+                        <TextView style="@style/SettingsRowDesc" android:text="@string/settings_row_scenes_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+                <com.google.android.material.divider.MaterialDivider
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="68dp"/>
+                <LinearLayout android:id="@+id/rowSetProfileAi" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_sparkle_24"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_row_ai_title"/>
+                        <TextView style="@style/SettingsRowDesc" android:text="@string/settings_row_ai_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+        <TextView android:layout_marginTop="24dp" android:text="@string/settings_section_maintenance" style="@style/LuminousSectionLabel"/>
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            style="@style/LuminousCard">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <LinearLayout android:id="@+id/rowSetDiagnostics" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_nav_settings_24"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_row_diagnostics_title"/>
+                        <TextView style="@style/SettingsRowDesc" android:text="@string/settings_row_diagnostics_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+                <com.google.android.material.divider.MaterialDivider
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="68dp"/>
+                <LinearLayout android:id="@+id/rowSetAbout" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_info_24"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_row_about_title"/>
+                        <TextView style="@style/SettingsRowDesc" android:text="@string/settings_row_about_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+                <com.google.android.material.divider.MaterialDivider
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="68dp"/>
+                <LinearLayout android:id="@+id/rowSetLanguage" style="@style/SettingsRow">
+                    <ImageView
+                        android:layout_width="40dp"
+                        android:layout_height="40dp"
+                        android:background="@drawable/bg_history_badge"
+                        android:padding="8dp"
+                        android:contentDescription="@null"
+                        android:src="@drawable/ic_brand_translate_24"
+                        app:tint="@color/brand"/>
+                    <LinearLayout
+                        style="@style/SettingsRowText"
+                        android:layout_marginStart="@dimen/space_12">
+                        <TextView style="@style/SettingsRowTitle" android:text="@string/settings_language_title"/>
+                        <TextView
+                            android:id="@+id/tvSettingsLanguageValue"
+                            style="@style/SettingsRowDesc"
+                            android:text="@string/settings_language_desc"/>
+                    </LinearLayout>
+                    <TextView style="@style/SettingsRowChevron"/>
+                </LinearLayout>
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+</ScrollView>

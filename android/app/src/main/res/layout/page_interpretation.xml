@@ -1,0 +1,732 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/pageInterp"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+
+    <!-- 空闲态独立滚动；开始后整个容器隐藏。 -->
+    <androidx.core.widget.NestedScrollView
+        android:id="@+id/interpIdleContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:fillViewport="true"
+        android:overScrollMode="never">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:orientation="vertical"
+            android:paddingHorizontal="@dimen/page_margin"
+            android:paddingTop="@dimen/space_16"
+            android:paddingBottom="@dimen/page_bottom_padding">
+
+            <TextView
+                style="@style/PageTitle"
+                android:text="@string/interp_title" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16"
+                android:background="@drawable/bg_language_pill"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/space_12"
+                android:paddingVertical="@dimen/space_8">
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    app:boxBackgroundMode="none"
+                    app:boxStrokeWidth="0dp"
+                    app:boxStrokeWidthFocused="0dp"
+                    app:endIconMode="none"
+                    app:hintEnabled="false">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/acInterpSourceLang"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:gravity="center"
+                        android:inputType="none"
+                        android:padding="0dp"
+                        android:textColor="@color/text_primary"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </com.google.android.material.textfield.TextInputLayout>
+
+                <TextView
+                    android:id="@+id/btnInterpSwapLang"
+                    android:layout_width="48dp"
+                    android:layout_height="48dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:gravity="center"
+                    android:text="@string/symbol_swap"
+                    android:textColor="@color/brand"
+                    android:textSize="18sp"
+                    android:textStyle="bold" />
+
+                <com.google.android.material.textfield.TextInputLayout
+                    style="@style/Widget.Material3.TextInputLayout.OutlinedBox.Dense"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    app:boxBackgroundMode="none"
+                    app:boxStrokeWidth="0dp"
+                    app:boxStrokeWidthFocused="0dp"
+                    app:endIconMode="none"
+                    app:hintEnabled="false">
+
+                    <com.google.android.material.textfield.MaterialAutoCompleteTextView
+                        android:id="@+id/acInterpTargetLang"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:background="@android:color/transparent"
+                        android:gravity="center"
+                        android:inputType="none"
+                        android:padding="0dp"
+                        android:textColor="@color/brand"
+                        android:textSize="15sp"
+                        android:textStyle="bold" />
+                </com.google.android.material.textfield.TextInputLayout>
+            </LinearLayout>
+
+            <!-- 另一个模式正在占用录音时的说明横幅；空闲时控制器整行 GONE。 -->
+            <LinearLayout
+                android:id="@+id/rowInterpBusy"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16"
+                android:background="@drawable/bg_warning_banner"
+                android:gravity="center_vertical"
+                android:orientation="horizontal"
+                android:paddingHorizontal="@dimen/space_16"
+                android:paddingVertical="@dimen/space_12"
+                android:visibility="gone">
+
+                <View
+                    android:layout_width="@dimen/status_dot_size"
+                    android:layout_height="@dimen/status_dot_size"
+                    android:background="@drawable/bg_warning_dot" />
+
+                <TextView
+                    android:id="@+id/tvInterpBusyStatus"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="@dimen/space_12"
+                    android:layout_weight="1"
+                    android:text="@string/interp_busy_status"
+                    android:textColor="@color/warning"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+
+                <TextView
+                    android:id="@+id/btnInterpBusyGoOther"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:gravity="center"
+                    android:paddingHorizontal="@dimen/space_8"
+                    android:text="@string/interp_busy_go_other"
+                    android:textColor="@color/warning"
+                    android:textSize="13sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_24"
+                android:gravity="center_horizontal"
+                android:orientation="vertical">
+
+                <FrameLayout
+                    android:layout_width="176dp"
+                    android:layout_height="176dp"
+                    android:background="@drawable/bg_mic_halo"
+                    android:padding="20dp">
+
+                    <com.google.android.material.button.MaterialButton
+                        android:id="@+id/btnInterpToggle"
+                        style="@style/LuminousPrimaryButton"
+                        android:layout_width="136dp"
+                        android:layout_height="136dp"
+                        android:insetTop="0dp"
+                        android:insetBottom="0dp"
+                        android:text="@string/interp_btn_start"
+                        app:cornerRadius="68dp"
+                        app:icon="@drawable/ic_mic_white_24"
+                        app:iconGravity="textTop"
+                        app:iconPadding="8dp"
+                        app:iconSize="36dp" />
+                </FrameLayout>
+
+                <LinearLayout
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_12"
+                    android:background="@drawable/bg_status_pill"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal"
+                    android:paddingHorizontal="@dimen/space_16"
+                    android:paddingVertical="@dimen/space_8">
+
+                    <View
+                        android:layout_width="@dimen/status_dot_size"
+                        android:layout_height="@dimen/status_dot_size"
+                        android:background="@drawable/bg_idle_dot" />
+
+                    <TextView
+                        android:id="@+id/tvInterpStatus"
+                        style="@style/LuminousStatusText"
+                        android:layout_marginStart="@dimen/space_8"
+                        android:text="@string/interp_status_idle" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvInterpSubStatus"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_8"
+                    android:text="@string/interp_sub_status_idle"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="12sp" />
+            </LinearLayout>
+
+            <!-- 场景行：标签 + 摘要 + 场景库入口；chips 单行横滑。 -->
+            <LinearLayout
+                android:id="@+id/cardInterpPlan"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_24"
+                android:orientation="vertical">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:gravity="center_vertical"
+                    android:orientation="horizontal">
+
+                    <TextView
+                        style="@style/LuminousSectionLabel"
+                        android:layout_width="0dp"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/label_scene" />
+
+                    <TextView
+                        android:id="@+id/btnInterpOpenPlanLibrary"
+                        android:layout_width="wrap_content"
+                        android:layout_height="48dp"
+                        android:gravity="center"
+                        android:paddingHorizontal="@dimen/space_8"
+                        android:text="@string/btn_scene_library_entry"
+                        android:textColor="@color/brand"
+                        android:textSize="13sp"
+                        android:textStyle="bold" />
+                </LinearLayout>
+
+                <TextView
+                    android:id="@+id/tvInterpPlanSummary"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/grid_4"
+                    android:text="@string/interp_plan_summary_default"
+                    android:textColor="@color/text_muted"
+                    android:textSize="12sp" />
+
+                <!-- 保留 ID，默认隐藏，不再展示 prompt 原文。 -->
+                <TextView
+                    android:id="@+id/tvInterpProfile"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:visibility="gone" />
+
+                <HorizontalScrollView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_8"
+                    android:overScrollMode="never"
+                    android:scrollbars="none">
+
+                    <com.google.android.material.chip.ChipGroup
+                        android:id="@+id/chipGroupInterpHomeScenes"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        app:chipSpacingHorizontal="@dimen/space_8"
+                        app:selectionRequired="true"
+                        app:singleLine="true"
+                        app:singleSelection="true" />
+                </HorizontalScrollView>
+            </LinearLayout>
+
+            <!-- 本场背景：默认折叠一行入口。 -->
+            <com.google.android.material.card.MaterialCardView
+                style="@style/LuminousCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_16">
+
+                    <LinearLayout
+                        android:id="@+id/rowInterpSessionContextToggle"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:minHeight="48dp"
+                        android:background="?attr/selectableItemBackground"
+                        android:clickable="true"
+                        android:focusable="true"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvInterpSessionContextHeader"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/interp_session_context_header"
+                                android:textColor="@color/text_primary"
+                                android:textSize="15sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvInterpSessionContextSummary"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/grid_4"
+                                android:ellipsize="end"
+                                android:maxLines="2"
+                                android:textColor="@color/text_muted"
+                                android:textSize="12sp"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <TextView
+                            android:id="@+id/btnInterpClearSessionContext"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:gravity="center"
+                            android:paddingHorizontal="@dimen/space_8"
+                            android:text="@string/btn_clear"
+                            android:textColor="@color/brand"
+                            android:textSize="13sp"
+                            android:textStyle="bold"
+                            android:visibility="gone" />
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:id="@+id/interpSessionContextBody"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:orientation="vertical"
+                        android:visibility="gone">
+
+                        <com.google.android.material.textfield.TextInputLayout
+                            style="@style/Field"
+                            android:layout_marginTop="@dimen/space_8"
+                            android:hint="@string/hint_session_context"
+                            app:helperText="@string/helper_interp_context">
+
+                            <com.google.android.material.textfield.TextInputEditText
+                                android:id="@+id/etInterpSessionContext"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:gravity="top"
+                                android:inputType="textCapSentences|textMultiLine"
+                                android:minLines="3"
+                                android:maxLines="7" />
+                        </com.google.android.material.textfield.TextInputLayout>
+
+                        <com.google.android.material.button.MaterialButton
+                            android:id="@+id/btnInterpAnalyzeContext"
+                            style="@style/LuminousSecondaryButton"
+                            android:layout_width="match_parent"
+                            android:layout_height="48dp"
+                            android:layout_marginTop="@dimen/space_12"
+                            android:text="@string/interp_btn_ai_organize_context" />
+
+                        <TextView
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_8"
+                            android:text="@string/interp_ai_organize_tip"
+                            android:textColor="@color/text_muted"
+                            android:textSize="12sp" />
+
+                        <LinearLayout
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_8"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
+
+                            <TextView
+                                android:id="@+id/tvInterpAnalyzeStatus"
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:text=""
+                                android:textColor="@color/text_muted"
+                                android:textSize="12sp"
+                                android:visibility="gone" />
+
+                            <TextView
+                                android:id="@+id/btnInterpAnalyzeConfigure"
+                                android:layout_width="wrap_content"
+                                android:layout_height="48dp"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/space_8"
+                                android:text="@string/btn_go_configure"
+                                android:textColor="@color/brand"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+
+                            <TextView
+                                android:id="@+id/btnInterpUndoAnalysis"
+                                android:layout_width="wrap_content"
+                                android:layout_height="48dp"
+                                android:gravity="center"
+                                android:paddingHorizontal="@dimen/space_8"
+                                android:text="@string/btn_undo_replacement"
+                                android:textColor="@color/brand"
+                                android:textSize="13sp"
+                                android:textStyle="bold"
+                                android:visibility="gone" />
+                        </LinearLayout>
+
+                        <!-- AI 结果先落在这里，不直接覆盖用户手写的资料。 -->
+                        <LinearLayout
+                            android:id="@+id/interpAnalyzePreview"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginTop="@dimen/space_8"
+                            android:background="@drawable/bg_history_context"
+                            android:orientation="vertical"
+                            android:padding="@dimen/space_12"
+                            android:visibility="gone">
+
+                            <TextView
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:text="@string/interp_ai_preview_banner"
+                                android:textColor="@color/text_muted"
+                                android:textSize="12sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvInterpAnalyzePreview"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/space_8"
+                                android:textColor="@color/text_primary"
+                                android:textSize="13sp" />
+
+                            <LinearLayout
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/space_12"
+                                android:orientation="horizontal">
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnInterpApplyAnalysis"
+                                    style="@style/LuminousSecondaryButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:minHeight="@dimen/touch_target"
+                                    android:layout_marginEnd="@dimen/space_8"
+                                    android:layout_weight="1"
+                                    android:text="@string/btn_apply_analysis" />
+
+                                <com.google.android.material.button.MaterialButton
+                                    android:id="@+id/btnInterpDiscardAnalysis"
+                                    style="@style/Widget.Material3.Button.TextButton"
+                                    android:layout_width="0dp"
+                                    android:layout_height="wrap_content"
+                                    android:minHeight="@dimen/touch_target"
+                                    android:layout_weight="1"
+                                    android:text="@string/btn_discard_analysis" />
+                            </LinearLayout>
+                        </LinearLayout>
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </LinearLayout>
+    </androidx.core.widget.NestedScrollView>
+
+    <!-- 运行态：顶部状态和底部停止固定，只有字幕区域滚动。 -->
+    <LinearLayout
+        android:id="@+id/interpRunningContent"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/page_margin"
+        android:paddingTop="@dimen/space_16"
+        android:paddingBottom="@dimen/space_16"
+        android:visibility="gone">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
+
+                <TextView style="@style/PageTitle" android:text="@string/interp_running_badge" />
+
+                <TextView
+                    android:id="@+id/tvInterpElapsed"
+                    android:layout_width="0dp"
+                    android:layout_height="wrap_content"
+                    android:layout_weight="1"
+                    android:fontFamily="monospace"
+                    android:gravity="end"
+                    android:text="@string/default_time_zero"
+                    android:textColor="@color/brand"
+                    android:textSize="20sp"
+                    android:textStyle="bold" />
+            </LinearLayout>
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/LuminousCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_16">
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:id="@+id/viewInterpRunningStatusDot"
+                            android:layout_width="@dimen/status_dot_size"
+                            android:layout_height="@dimen/status_dot_size"
+                            android:background="@drawable/bg_success_dot" />
+
+                        <TextView
+                            android:id="@+id/tvInterpRunningStatus"
+                            style="@style/LuminousStatusText"
+                            android:layout_marginStart="@dimen/space_8"
+                            android:text="@string/status_preparing_connection" />
+
+                        <TextView
+                            android:id="@+id/tvInterpAudioLevel"
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:fontFamily="monospace"
+                            android:gravity="end"
+                            android:text="@string/default_percentage_zero"
+                            android:textColor="@color/brand"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+
+                    <ProgressBar
+                        android:id="@+id/pbInterpAudio"
+                        style="?android:attr/progressBarStyleHorizontal"
+                        android:layout_width="match_parent"
+                        android:layout_height="6dp"
+                        android:layout_marginTop="@dimen/space_12"
+                        android:max="100"
+                        android:progress="0"
+                        android:progressBackgroundTint="@color/surface_high"
+                        android:progressTint="@color/brand" />
+
+                    <TextView
+                        android:id="@+id/tvInterpRunningMeta"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_8"
+                        android:text="@string/interp_running_meta_default"
+                        android:textColor="@color/text_muted"
+                        android:textSize="12sp" />
+
+                    <!-- 长时间收不到声音时的排查提示；正常静音不会触发。 -->
+                    <TextView
+                        android:id="@+id/tvInterpSilenceTip"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_8"
+                        android:textColor="@color/warning"
+                        android:textSize="12sp"
+                        android:visibility="gone" />
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+
+        <androidx.core.widget.NestedScrollView
+            android:id="@+id/interpSubtitleScroll"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:fillViewport="true"
+            android:overScrollMode="never">
+
+            <com.google.android.material.card.MaterialCardView
+                style="@style/LuminousCard"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="@dimen/space_16">
+
+                <LinearLayout
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:orientation="vertical"
+                    android:padding="@dimen/space_16">
+
+                    <TextView style="@style/CardTitle" android:text="@string/label_live_subtitles" />
+
+                    <LinearLayout
+                        android:id="@+id/interpConfirmedList"
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_12"
+                        android:orientation="vertical" />
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_16"
+                        android:orientation="horizontal">
+
+                        <View
+                            android:layout_width="2dp"
+                            android:layout_height="match_parent"
+                            android:background="@drawable/bg_transcript_accent" />
+
+                        <LinearLayout
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_marginStart="@dimen/space_12"
+                            android:layout_weight="1"
+                            android:orientation="vertical">
+
+                            <TextView
+                                android:id="@+id/tvInterpTargetLanguageLabel"
+                                style="@style/FieldLabel"
+                                android:layout_marginTop="0dp"
+                                android:text="@string/target_lang_chinese" />
+
+                            <TextView
+                                android:id="@+id/tvInterpZh"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/grid_4"
+                                android:minHeight="56dp"
+                                android:text="@string/subtitle_waiting_translation"
+                                android:textColor="@color/text_primary"
+                                android:textSize="24sp"
+                                android:textStyle="bold" />
+
+                            <TextView
+                                android:id="@+id/tvInterpJa"
+                                android:layout_width="match_parent"
+                                android:layout_height="wrap_content"
+                                android:layout_marginTop="@dimen/space_8"
+                                android:minHeight="32dp"
+                                android:text="@string/subtitle_waiting_speech"
+                                android:textColor="@color/text_secondary"
+                                android:textSize="15sp" />
+                        </LinearLayout>
+                    </LinearLayout>
+
+                    <LinearLayout
+                        android:layout_width="match_parent"
+                        android:layout_height="wrap_content"
+                        android:layout_marginTop="@dimen/space_16"
+                        android:gravity="center_vertical"
+                        android:orientation="horizontal">
+
+                        <TextView
+                            android:layout_width="0dp"
+                            android:layout_height="wrap_content"
+                            android:layout_weight="1"
+                            android:text="@string/label_subtitles_auto_saved"
+                            android:textColor="@color/text_muted"
+                            android:textSize="12sp" />
+
+                        <TextView
+                            android:id="@+id/btnInterpOpenHistory"
+                            android:layout_width="wrap_content"
+                            android:layout_height="48dp"
+                            android:gravity="center"
+                            android:paddingHorizontal="@dimen/space_8"
+                            android:text="@string/btn_view_current_session_record"
+                            android:textColor="@color/brand"
+                            android:textSize="13sp"
+                            android:textStyle="bold" />
+                    </LinearLayout>
+                </LinearLayout>
+            </com.google.android.material.card.MaterialCardView>
+        </androidx.core.widget.NestedScrollView>
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnInterpScrollLatest"
+                style="@style/LuminousSecondaryButton"
+                android:layout_width="wrap_content"
+                android:layout_height="@dimen/touch_target"
+                android:layout_gravity="bottom|center_horizontal"
+                android:layout_marginBottom="@dimen/space_8"
+                android:text="@string/btn_scroll_latest"
+                android:visibility="gone"
+                app:icon="@drawable/ic_arrow_down_24"
+                app:iconGravity="textStart"
+                app:iconPadding="@dimen/grid_4"
+                app:iconTint="@color/brand" />
+        </FrameLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnInterpPause"
+                style="@style/LuminousSecondaryButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/primary_action_height"
+                android:layout_marginEnd="@dimen/space_8"
+                android:layout_weight="1"
+                android:text="@string/btn_pause" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnInterpStop"
+                style="@style/LuminousDangerButton"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/primary_action_height"
+                android:layout_weight="1"
+                android:text="@string/interp_btn_stop"
+                app:icon="@drawable/ic_stop_white_24"
+                app:iconGravity="textStart"
+                app:iconPadding="@dimen/space_8" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

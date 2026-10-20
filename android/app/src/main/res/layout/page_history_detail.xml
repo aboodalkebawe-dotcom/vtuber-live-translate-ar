@@ -1,0 +1,131 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/pageHistoryDetail"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:fillViewport="true"
+    android:visibility="gone">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingHorizontal="@dimen/page_margin"
+        android:paddingTop="@dimen/space_16"
+        android:paddingBottom="@dimen/page_bottom_padding">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <TextView
+                android:id="@+id/tvHistoryTitle"
+                style="@style/PageTitle"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:ellipsize="end"
+                android:maxLines="2"
+                android:text="@string/history_detail_title" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnShareHistory"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_target"
+                android:layout_marginStart="@dimen/grid_4"
+                android:text="@string/history_detail_btn_share"
+                android:textColor="@color/brand" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnCopyHistory"
+                style="@style/LuminousSecondaryButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_target"
+                android:layout_marginStart="@dimen/grid_4"
+                android:text="@string/history_detail_btn_copy" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/btnDeleteHistory"
+                style="@style/Widget.Material3.Button.TextButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:minHeight="@dimen/touch_target"
+                android:layout_marginStart="@dimen/grid_4"
+                android:text="@string/history_detail_btn_delete"
+                android:textColor="@color/error" />
+        </LinearLayout>
+
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/cardHistoryDetail"
+            style="@style/LuminousCard"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_16">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical"
+                android:padding="@dimen/space_16">
+
+                <TextView style="@style/CardTitle" android:text="@string/history_detail_section_session" />
+
+                <TextView
+                    android:id="@+id/tvHistoryDetailMeta"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_8"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="14sp" />
+
+                <TextView
+                    android:id="@+id/tvHistoryDetailContext"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="@dimen/space_12"
+                    android:background="@drawable/bg_history_context"
+                    android:padding="@dimen/space_12"
+                    android:textColor="@color/text_secondary"
+                    android:textSize="13sp"
+                    android:visibility="gone" />
+            </LinearLayout>
+        </com.google.android.material.card.MaterialCardView>
+
+        <TextView
+            style="@style/LuminousSectionLabel"
+            android:layout_marginTop="@dimen/space_24"
+            android:text="@string/history_detail_section_subtitles" />
+
+        <TextView
+            android:id="@+id/tvHistoryDetailEmpty"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_16"
+            android:gravity="center"
+            android:padding="@dimen/space_24"
+            android:text="@string/history_detail_empty_segments"
+            android:textColor="@color/text_muted"
+            android:textSize="14sp"
+            android:visibility="gone" />
+
+        <LinearLayout
+            android:id="@+id/historyDetailSegments"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="@dimen/space_12"
+            android:orientation="vertical" />
+
+        <!-- 保留旧 ID，存放可复制的 Markdown 全文，不直接展示。 -->
+        <TextView
+            android:id="@+id/tvHistoryDetail"
+            android:layout_width="1dp"
+            android:layout_height="1dp"
+            android:text=""
+            android:visibility="gone" />
+    </LinearLayout>
+</ScrollView>
